@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sesame Voice Assistant (Web)</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #1a1a1a; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        h1 { margin-bottom: 20px; }
+        #status { margin-bottom: 20px; padding: 10px; border-radius: 5px; background: #333; }
+        .btn { padding: 15px 30px; font-size: 18px; border: none; border-radius: 50px; cursor: pointer; transition: 0.3s; margin: 10px; }
+        #startBtn { background: #28a745; color: white; }
+        #startBtn:hover { background: #218838; }
+        #stopBtn { background: #dc3545; color: white; display: none; }
+        #stopBtn:hover { background: #c82333; }
+        .indicator { width: 20px; height: 20px; border-radius: 50%; background: #555; display: inline-block; margin-left: 10px; }
+        .indicator.active { background: #0f0; box-shadow: 0 0 10px #0f0; }
+        #log { width: 80%; max-width: 600px; height: 200px; background: #000; overflow-y: scroll; padding: 10px; border: 1px solid #444; font-family: monospace; font-size: 12px; margin-top: 20px; }
+    </style>
+</head>
+<body>
+
+    <h1>Sesame Voice Assistant</h1>
+    <div id="status">Status: Disconnected <span class="indicator" id="wsIndicator"></span></div>
+
+    <div>
+        <button id="startBtn" class="btn" onclick="start()">Start Conversation</button>
+        <button id="stopBtn" class="btn" onclick="stop()">Stop</button>
+    </div>
+
+    <div id="log"></div>
+
+    <script>
+        let ws;
+        let audioContext;
+        let processor;
+        let source;
+        let isRecording = false;
+        
+        // Configuration
+        const SAMPLE_RATE = 16000;
+        const BUFFER_SIZE = 4096;
+
+        function log(msg) {
+            const div = document.getElementById('log');
+            div.innerHTML += `<div>${new Date().toLocaleTimeString()} - ${msg}</div>`;
+            div.scrollTop = div.scrollHeight;
+        }
+
+        async function start() {
+            try {
+                // Initialize WebSocket
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                ws = new WebSocket(`${protocol}//${window.location.host}/ws`);
+                
+                ws.onopen = () => {
+                    log('WebSocket Connected');
+                    document.getElementById('wsIndicator').classList.add('active');
+                    document.getElementById('status').innerText = 'Status: Connected';
+                    startAudio();
+                };
+
+                ws.onmessage = async (event) => {
+                    // Receive audio blob from server
+                    const blob = event.data;
+                    const arrayBuffer = await blob.arrayBuffer();
+                    playAudioChunk(arrayBuffer);
+                };
+
+                ws.onclose = () => {
+                    log('WebSocket Disconnected');
+                    stop();
+                };
+
+                ws.onerror = (e) => {
+                    log('WebSocket Error: ' + e);
+                };
+
+                document.getElementById('startBtn').style.display = 'none';
+                document.getElementById('stopBtn').style.display = 'inline-block';
+
+            } catch (e) {
+                log('Error starting: ' + e);
+            }
+        }
+
+        async function startAudio() {
+            try {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: SAMPLE_RATE });
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                
+                source = audioContext.createMediaStreamSource(stream);
+                
+                // Worklet or ScriptProcessor (ScriptProcessor is deprecated but easier for single file demo)
+                processor = audioContext.createScriptProcessor(BUFFER_SIZE, 1, 1);
+                
+                processor.onaudioprocess = (e) => {
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        const inputData = e.inputBuffer.getChannelData(0);
+                        // Downsample/Convert to Int16
+                        const pcmData = floatTo16BitPCM(inputData);
+                        ws.send(pcmData);
+                    }
+                };
+
+                source.connect(processor);
+                processor.connect(audioContext.destination); // Needed for Chrome to activate processor
+                
+                isRecording = true;
+                log('Microphone Active');
+            } catch (e) {
+                log('Microphone Error: ' + e);
+                alert('Microphone access denied or error: ' + e);
+            }
+        }
+
+        function stop() {
+            isRecording = false;
+            if (ws) ws.close();
+            if (source) source.disconnect();
+            if (processor) processor.disconnect();
+            if (audioContext) audioContext.close();
+            
+            document.getElementById('startBtn').style.display = 'inline-block';
+            document.getElementById('stopBtn').style.display = 'none';
+            document.getElementById('wsIndicator').classList.remove('active');
+            document.getElementById('status').innerText = 'Status: Disconnected';
+        }
+
+        function floatTo16BitPCM(input) {
+            const output = new Int16Array(input.length);
+            for (let i = 0; i < input.length; i++) {
+                const s = Math.max(-1, Math.min(1, input[i]));
+                output[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+            }
+            return output.buffer;
+        }
+
+        // Playback Queue
+        let nextStartTime = 0;
+        
+        function playAudioChunk(arrayBuffer) {
+            // Decode raw PCM? No, server sends raw PCM bytes?
+            // Actually, server sends what EdgeTTS produces (mp3) or raw?
+            // EdgeTTS produces MP3 by default. PyAudio plays raw.
+            // Wait, Orchestrator receives from EdgeTTS. 
+            // If EdgeTTS is sending MP3, PyAudio implementation might fail if it expects raw.
+            // Let's check tts.py.
+            
+            // Assuming the server sends raw PCM or we decode it here.
+            // If server sends raw Int16 PCM:
+            const audioData = new Int16Array(arrayBuffer);
+            const floatData = new Float32Array(audioData.length);
+            for(let i=0; i<audioData.length; i++) {
+                floatData[i] = audioData[i] / 32768.0;
+            }
+            
+            const buffer = audioContext.createBuffer(1, floatData.length, SAMPLE_RATE);
+            buffer.getChannelData(0).set(floatData);
+            
+            const source = audioContext.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioContext.destination);
+            
+            if (nextStartTime < audioContext.currentTime) {
+                nextStartTime = audioContext.currentTime;
+            }
+            source.start(nextStartTime);
+            nextStartTime += buffer.duration;
+        }
+    </script>
+</body>
+</html>

@@ -6,9 +6,8 @@ import os
 class ASRManager:
     def __init__(self):
         # Determine device
-        device = "cpu" # Default to CPU for safety
-        # In a real scenario we'd check for cuda
-        # device = "cuda" if torch.cuda.is_available() else "cpu"
+        import torch
+        device = "cuda" if torch.cuda.is_available() else "cpu"
         
         print(f"Loading Whisper Model ({Config.WHISPER_MODEL_SIZE}) on {device}...")
         self.model = WhisperModel(

@@ -9,4 +9,10 @@ groq
 python-dotenv
 edge-tts
 ffmpeg-python
+fastapi
+uvicorn
+websockets
+python-multipart
+jinja2
+
 

@@ -3,8 +3,7 @@ import edge_tts
 import numpy as np
 import io
 import soundfile as sf
-import tempfile
-import os
+import ffmpeg
 
 class TTSManager:
     def __init__(self):
@@ -63,35 +62,20 @@ class TTSManager:
 
     def _convert_bytes_to_pcm(self, audio_bytes):
         """
-        Convert mp3 bytes from edge-tts to raw pcm int16 for PyAudio
+        Convert mp3 bytes from edge-tts to raw pcm int16 16000Hz using ffmpeg
         """
         try:
-            # edge-tts returns mp3, we use soundfile to read it
-            with io.BytesIO(audio_bytes) as f:
-                data, samplerate = sf.read(f, dtype='int16')
-                
-            # Resample if necessary (PyAudio is set to 16000Hz)
-            # Edge-TTS usually gives 24k. We might need resampling.
-            # For simplicity, if sample rate differs, we should resample.
-            # But here we will just return it and assume PyAudio can handle 
-            # or we might speed/slow audio.
-            # Let's check config.
-            from src.utils.config import Config
-            if samplerate != Config.SAMPLE_RATE:
-                # Basic resampling (scipy or simple slicing if integer multiple)
-                # For now, let's just warn or try to use a library if present.
-                # Since we don't have librosa/scipy in requirements, 
-                # we will rely on soundfile/numpy if possible or just let it play slightly off-pitch
-                # OR better: Configure PyAudio output stream to match TTS rate dynamically.
-                # But our Orchestrator sets up AudioStreamManager once.
-                
-                # IMPORTANT: Resampling is complex without scipy/librosa.
-                # We will just return data. The user might hear pitch shift if we don't fix.
-                # Quick fix: simple linear interpolation if needed, or update Config.SAMPLE_RATE?
-                # But Mic input needs 16k for Whisper/Silero.
-                pass
-                
-            return data
+            # Use ffmpeg to convert directly to s16le 16000Hz
+            out, _ = (
+                ffmpeg
+                .input('pipe:0')
+                .output('pipe:1', format='s16le', acodec='pcm_s16le', ac=1, ar='16000')
+                .run(input=audio_bytes, capture_stdout=True, capture_stderr=True)
+            )
+            return np.frombuffer(out, dtype=np.int16)
+        except ffmpeg.Error as e:
+            print('ffmpeg error:', e.stderr.decode('utf8'))
+            return np.zeros(1024, dtype=np.int16)
         except Exception as e:
             print(f"Error converting audio: {e}")
             return np.zeros(1024, dtype=np.int16)
