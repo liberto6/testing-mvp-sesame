@@ -8,4 +8,5 @@ colorama
 groq
 python-dotenv
 edge-tts
+ffmpeg-python
 
