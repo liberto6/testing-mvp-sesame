@@ -9,6 +9,7 @@ class WebSocketAudioManager:
         self.input_queue = queue.Queue()
         self.loop = asyncio.get_event_loop()
         self.is_running = True
+        self.buffer = np.array([], dtype=np.int16)
 
     def start(self):
         self.is_running = True
@@ -58,10 +59,22 @@ class WebSocketAudioManager:
     def add_input_audio(self, audio_bytes):
         """
         Called by the FastAPI route when new bytes arrive from client.
+        Handles buffering and splitting into Config.CHUNK_SIZE chunks.
         """
-        # Convert bytes to numpy int16 (assuming client sends raw PCM 16-bit)
         try:
-            audio_data = np.frombuffer(audio_bytes, dtype=np.int16)
-            self.input_queue.put(audio_data)
+            # Convert bytes to numpy int16
+            new_data = np.frombuffer(audio_bytes, dtype=np.int16)
+            
+            # Append to internal buffer
+            self.buffer = np.concatenate((self.buffer, new_data))
+            
+            # Process chunks of Config.CHUNK_SIZE
+            chunk_size = Config.CHUNK_SIZE
+            
+            while len(self.buffer) >= chunk_size:
+                chunk = self.buffer[:chunk_size]
+                self.buffer = self.buffer[chunk_size:]
+                self.input_queue.put(chunk)
+                
         except Exception as e:
             print(f"Error processing input audio: {e}")
