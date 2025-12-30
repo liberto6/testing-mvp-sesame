@@ -6,7 +6,7 @@ from src.utils.config import Config
 class WebSocketAudioManager:
     def __init__(self, websocket):
         self.websocket = websocket
-        self.input_queue = queue.Queue()
+        self.input_queue = asyncio.Queue()
         self.loop = asyncio.get_event_loop()
         self.is_running = True
         self.buffer = np.array([], dtype=np.int16)

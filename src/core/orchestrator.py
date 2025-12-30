@@ -112,6 +112,7 @@ class Orchestrator:
                         self.silence_frames = 0
         except Exception as e:
             print(f"Error in listening loop: {e}")
+            await asyncio.sleep(1.0) # Prevent tight loop on error
 
     async def _handle_processing(self):
         """

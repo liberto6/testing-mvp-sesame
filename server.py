@@ -12,18 +12,24 @@ from src.core.orchestrator import Orchestrator
 from src.audio.websocket_audio_manager import WebSocketAudioManager
 from src.utils.config import Config
 
-app = FastAPI()
+from contextlib import asynccontextmanager
 
-# Mount static files
-app.mount("/static", StaticFiles(directory="src/web/static"), name="static")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Load models
+    print("Loading models...")
+    global vad, asr, llm, tts
+    vad = VADManager()
+    asr = ASRManager()
+    llm = LLMManager()
+    tts = TTSManager()
+    print("Models loaded!")
+    yield
+    # Clean up
+    print("Cleaning up resources...")
+    # Add any cleanup logic here if needed
 
-# Initialize models globally to avoid reloading them per connection
-print("Loading models...")
-vad = VADManager()
-asr = ASRManager()
-llm = LLMManager()
-tts = TTSManager()
-print("Models loaded!")
+app = FastAPI(lifespan=lifespan)
 
 @app.get("/")
 async def get():
