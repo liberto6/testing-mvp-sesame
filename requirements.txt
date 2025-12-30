@@ -14,5 +14,7 @@ uvicorn
 websockets
 python-multipart
 jinja2
+nvidia-cudnn-cu12
+nvidia-cublas-cu12
 
 
