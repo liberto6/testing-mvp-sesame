@@ -23,7 +23,7 @@ class TTSManager:
                 audio_data += chunk["data"]
         return audio_data
 
-    def generate_audio(self, text_stream):
+    async def generate_audio(self, text_stream):
         """
         Generates audio from a text stream (iterator).
         Yields chunks of audio data (numpy array).
@@ -33,6 +33,8 @@ class TTSManager:
         # We need to buffer text slightly to form coherent sentences for TTS
         buffer = ""
         
+        # text_stream is a synchronous generator (from LLM), so we iterate it synchronously
+        # or we wrap it. If it's just a generator object:
         for text_chunk in text_stream:
             buffer += text_chunk
             
@@ -109,12 +111,12 @@ class TTSManager:
                     buffer = buffer[last_punct_idx+1:]
                     
                     if to_process.strip():
-                        audio_bytes = asyncio.run(self._generate_audio_chunk(to_process))
+                        audio_bytes = await self._generate_audio_chunk(to_process)
                         yield self._convert_bytes_to_pcm(audio_bytes)
 
         # Process remaining buffer
         if buffer.strip():
-            audio_bytes = asyncio.run(self._generate_audio_chunk(buffer))
+            audio_bytes = await self._generate_audio_chunk(buffer)
             yield self._convert_bytes_to_pcm(audio_bytes)
 
     def _convert_bytes_to_pcm(self, audio_bytes):

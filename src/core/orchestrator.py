@@ -153,11 +153,11 @@ class Orchestrator:
         self.should_interrupt = False
         
         # We need to interleave generation and playback while checking for interruption
-        audio_stream = self.tts.generate_audio(response_stream)
+        # Since TTS generation is now async, we use 'async for'
         
         first_chunk = True
         
-        for audio_chunk in audio_stream:
+        async for audio_chunk in self.tts.generate_audio(response_stream):
             # Check for interruption before playing
             if await self.interruption_check():
                 print("[Pipeline] 🛑 Playback interrupted by user.")
