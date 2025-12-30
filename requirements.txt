@@ -1,0 +1,11 @@
+torch
+torchaudio
+numpy
+pyaudio
+faster-whisper
+soundfile
+colorama
+groq
+python-dotenv
+edge-tts
+
