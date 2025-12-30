@@ -13,10 +13,10 @@ class Config:
     # VAD settings
     VAD_THRESHOLD = 0.5
     MIN_SPEECH_DURATION_MS = 250
-    MIN_SILENCE_DURATION_MS = 500
+    MIN_SILENCE_DURATION_MS = 350
     
     # Models
-    WHISPER_MODEL_SIZE = "tiny"  # Use 'base' or 'small' for better accuracy if GPU available
+    WHISPER_MODEL_SIZE = "base.en"  # 'base.en' is slightly better/faster than tiny multilingual for English
     COMPUTE_TYPE = "int8"
     
     # API Keys
