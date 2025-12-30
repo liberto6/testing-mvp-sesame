@@ -4,6 +4,7 @@ import numpy as np
 import io
 import soundfile as sf
 import ffmpeg
+from src.utils.config import Config
 
 class TTSManager:
     def __init__(self):
