@@ -104,31 +104,47 @@ class Orchestrator:
         if not self.speech_buffer:
             return
 
+        turn_start = time.perf_counter()
         audio_data = np.concatenate(self.speech_buffer)
         
         # 1. ASR
-        print("[ASR] Transcribing...")
+        asr_start = time.perf_counter()
+        print(f"\n[Pipeline] 🎤 Starting ASR...")
         text = self.asr.transcribe(audio_data)
-        print(f"[ASR] User said: '{text}'")
+        asr_duration = time.perf_counter() - asr_start
+        print(f"[Pipeline] ✅ ASR Finished in {asr_duration:.3f}s. User said: '{text}'")
         
         if not text.strip():
             return
 
         # 2. LLM
-        print("[LLM] Generating response...")
+        print(f"[Pipeline] 🧠 Starting LLM generation...")
+        llm_start = time.perf_counter()
         response_stream = self.llm.generate_response(text)
         
         # 3. TTS & Playback
         # We assume response_stream yields text chunks.
         # We wrap it to generate audio chunks.
+        print(f"[Pipeline] 🗣️  Starting TTS generation...")
         audio_stream = self.tts.generate_audio(response_stream)
         
         self.should_interrupt = False
         
-        print("[Audio] Playing response...")
+        first_chunk = True
+        
         for audio_chunk in audio_stream:
+            if first_chunk:
+                time_to_first_audio = time.perf_counter() - turn_start
+                ttft = time.perf_counter() - llm_start # Approximate time to first audio from LLM start
+                print(f"\n[Pipeline] ⚡ LATENCY REPORT:")
+                print(f"  - Total Latency (End-of-Speech -> Audio): {time_to_first_audio:.3f}s")
+                print(f"  - ASR Duration: {asr_duration:.3f}s")
+                print(f"  - Processing (LLM+TTS) Latency: {ttft:.3f}s")
+                print("-" * 40)
+                first_chunk = False
+            
             if self.should_interrupt:
-                print("[Audio] Playback interrupted.")
+                print("[Pipeline] 🛑 Playback interrupted by user.")
                 break
                 
             self.audio.play_audio(audio_chunk, interrupt_check_callback=self.interruption_check)
@@ -137,4 +153,5 @@ class Orchestrator:
             if self.should_interrupt:
                 break
         
-        print("[Audio] Playback finished or interrupted.")
+        total_turn_duration = time.perf_counter() - turn_start
+        print(f"[Pipeline] 🏁 Turn finished. Total duration: {total_turn_duration:.3f}s")
