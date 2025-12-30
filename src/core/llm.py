@@ -32,9 +32,9 @@ class LLMManager:
         
         if self.client:
             try:
-                # Using Llama 3 8b or Mixtral for speed/quality balance on Groq
+                # Using Llama 3.1 8b for speed/quality balance on Groq
                 stream = self.client.chat.completions.create(
-                    model="llama3-8b-8192", 
+                    model="llama-3.1-8b-instant", 
                     messages=self.history,
                     stream=True,
                     max_tokens=150,
@@ -52,11 +52,11 @@ class LLMManager:
                 
             except Exception as e:
                 print(f"Error calling Groq API: {e}")
-                error_msg = "Lo siento, hubo un error de conexión."
+                error_msg = "I'm sorry, I'm having trouble connecting to the server right now."
                 yield error_msg
                 self.history.append({"role": "assistant", "content": error_msg})
         else:
             # Fallback
-            response_text = f"Modo offline. Dijiste: {text}"
+            response_text = f"Offline mode. You said: {text}"
             self.history.append({"role": "assistant", "content": response_text})
             yield response_text

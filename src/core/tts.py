@@ -8,8 +8,9 @@ import ffmpeg
 class TTSManager:
     def __init__(self):
         # Using a high quality English voice for teaching
-        self.voice = "en-US-ChristopherNeural" 
-        # Other options: en-US-AriaNeural, en-GB-SoniaNeural, etc.
+        # en-US-GuyNeural is a standard, clear American male voice
+        self.voice = "en-US-GuyNeural" 
+        # Other options: en-US-AriaNeural (Female), en-GB-RyanNeural (British Male)
 
     async def _generate_audio_chunk(self, text):
         """
