@@ -6,7 +6,7 @@ from src.utils.config import Config
 class WebSocketAudioManager:
     def __init__(self, websocket):
         self.websocket = websocket
-        self.input_queue = queue.Queue()
+        self.input_queue = asyncio.Queue()
         self.loop = asyncio.get_event_loop()
         self.is_running = True
         self.buffer = np.array([], dtype=np.int16)
@@ -17,15 +17,17 @@ class WebSocketAudioManager:
     def stop(self):
         self.is_running = False
 
-    def read_frame(self):
+    async def read_frame(self):
         """
         Reads a frame from the input queue (filled by the websocket receiver).
         Matches the interface of AudioStreamManager.
         """
         try:
-            # Non-blocking get with timeout to allow checking is_running
-            return self.input_queue.get(timeout=0.1)
-        except queue.Empty:
+            # Async get
+            return await self.input_queue.get()
+        except asyncio.CancelledError:
+            return None
+        except Exception:
             return None
 
     def play_audio(self, audio_data, interrupt_check_callback=None):
@@ -47,14 +49,21 @@ class WebSocketAudioManager:
 
         # Send to WebSocket (thread-safe)
         try:
-            future = asyncio.run_coroutine_threadsafe(
-                self.websocket.send_bytes(audio_bytes), 
-                self.loop
-            )
-            # Optional: wait for it to be sent? usually fire and forget is faster for streaming
-            # future.result() 
+            # We are running in the same event loop now, so we can just spawn a task
+            asyncio.create_task(self.websocket.send_bytes(audio_bytes))
         except Exception as e:
             print(f"Error sending audio to websocket: {e}")
+
+    def clear_audio_buffer(self):
+        """
+        Sends a signal to the client to clear its audio buffer (stop playback).
+        """
+        if not self.is_running:
+            return
+        try:
+            asyncio.create_task(self.websocket.send_json({"type": "CLEAR_BUFFER"}))
+        except Exception as e:
+            print(f"Error sending clear buffer signal: {e}")
 
     def add_input_audio(self, audio_bytes):
         """
@@ -74,7 +83,7 @@ class WebSocketAudioManager:
             while len(self.buffer) >= chunk_size:
                 chunk = self.buffer[:chunk_size]
                 self.buffer = self.buffer[chunk_size:]
-                self.input_queue.put(chunk)
+                self.input_queue.put_nowait(chunk)
                 
         except Exception as e:
             print(f"Error processing input audio: {e}")

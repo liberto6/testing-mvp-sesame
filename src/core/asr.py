@@ -26,7 +26,7 @@ class ASRManager:
 
         # Transcribe with auto-detection or English preference
         # We allow auto-detection so we can hear if the student asks in Spanish
-        segments, info = self.model.transcribe(audio_data, beam_size=5)
+        segments, info = self.model.transcribe(audio_data, beam_size=1)
         
         text = ""
         for segment in segments:

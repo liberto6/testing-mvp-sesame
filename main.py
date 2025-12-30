@@ -1,5 +1,6 @@
 import os
 import sys
+import asyncio
 
 # Add src to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -11,7 +12,7 @@ from src.core.llm import LLMManager
 from src.core.tts import TTSManager
 from src.core.orchestrator import Orchestrator
 
-def main():
+async def main():
     print("Initializing Sesame-inspired Voice Assistant...")
     
     # Initialize modules
@@ -24,7 +25,7 @@ def main():
         
         orchestrator = Orchestrator(audio, vad, asr, llm, tts)
         
-        orchestrator.run()
+        await orchestrator.run()
         
     except Exception as e:
         print(f"Error initializing system: {e}")
@@ -32,4 +33,6 @@ def main():
         traceback.print_exc()
 
 if __name__ == "__main__":
-    main()
+    if sys.platform == 'win32':
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    asyncio.run(main())

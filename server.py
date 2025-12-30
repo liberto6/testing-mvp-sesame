@@ -12,18 +12,24 @@ from src.core.orchestrator import Orchestrator
 from src.audio.websocket_audio_manager import WebSocketAudioManager
 from src.utils.config import Config
 
-app = FastAPI()
+from contextlib import asynccontextmanager
 
-# Mount static files
-app.mount("/static", StaticFiles(directory="src/web/static"), name="static")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Load models
+    print("Loading models...")
+    global vad, asr, llm, tts
+    vad = VADManager()
+    asr = ASRManager()
+    llm = LLMManager()
+    tts = TTSManager()
+    print("Models loaded!")
+    yield
+    # Clean up
+    print("Cleaning up resources...")
+    # Add any cleanup logic here if needed
 
-# Initialize models globally to avoid reloading them per connection
-print("Loading models...")
-vad = VADManager()
-asr = ASRManager()
-llm = LLMManager()
-tts = TTSManager()
-print("Models loaded!")
+app = FastAPI(lifespan=lifespan)
 
 @app.get("/")
 async def get():
@@ -42,10 +48,8 @@ async def websocket_endpoint(websocket: WebSocket):
     # We pass the global models but a unique audio manager
     orchestrator = Orchestrator(audio_manager, vad, asr, llm, tts)
     
-    # Run orchestrator in a separate thread because it has a blocking loop
-    orchestrator_thread = threading.Thread(target=orchestrator.run)
-    orchestrator_thread.daemon = True
-    orchestrator_thread.start()
+    # Run orchestrator as an asyncio Task (non-blocking)
+    orchestrator_task = asyncio.create_task(orchestrator.run())
     
     try:
         while True:
@@ -57,10 +61,12 @@ async def websocket_endpoint(websocket: WebSocket):
         print("WebSocket disconnected")
         audio_manager.stop()
         orchestrator.stop()
+        orchestrator_task.cancel()
     except Exception as e:
         print(f"Error: {e}")
         audio_manager.stop()
         orchestrator.stop()
+        orchestrator_task.cancel()
 
 if __name__ == "__main__":
     import uvicorn

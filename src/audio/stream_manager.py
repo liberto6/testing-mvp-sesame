@@ -2,6 +2,7 @@ import pyaudio
 import queue
 import threading
 import numpy as np
+import asyncio
 from src.utils.config import Config
 
 class AudioStreamManager:

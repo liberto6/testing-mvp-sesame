@@ -4,12 +4,13 @@ import numpy as np
 import io
 import soundfile as sf
 import ffmpeg
+from src.utils.config import Config
 
 class TTSManager:
     def __init__(self):
         # Using a high quality English voice for teaching
         # en-US-GuyNeural is a standard, clear American male voice
-        self.voice = "en-US-GuyNeural" 
+        self.voice = Config.TTS_VOICE
         # Other options: en-US-AriaNeural (Female), en-GB-RyanNeural (British Male)
 
     async def _generate_audio_chunk(self, text):
@@ -23,7 +24,7 @@ class TTSManager:
                 audio_data += chunk["data"]
         return audio_data
 
-    def generate_audio(self, text_stream):
+    async def generate_audio(self, text_stream):
         """
         Generates audio from a text stream (iterator).
         Yields chunks of audio data (numpy array).
@@ -33,38 +34,100 @@ class TTSManager:
         # We need to buffer text slightly to form coherent sentences for TTS
         buffer = ""
         
-        for text_chunk in text_stream:
+        # text_stream is an async generator (from LLM)
+        async for text_chunk in text_stream:
             buffer += text_chunk
             
             # Simple heuristic: split by punctuation to send to TTS
             # This reduces latency compared to waiting for full response
+            should_process = False
+            
+            # Strong punctuation (always split)
             if any(punct in buffer for punct in [".", "!", "?", "\n"]):
+                should_process = True
+            # Weak punctuation (split only if buffer is long enough)
+            elif len(buffer) > 50 and any(punct in buffer for punct in [",", ";", ":"]):
+                should_process = True
+                
+            if should_process:
                 # Find the last punctuation
                 import re
-                parts = re.split(r'([.!?\n])', buffer)
+                # Split keeping the delimiters
+                parts = re.split(r'([.!?\n,;:])', buffer)
                 
-                # Process complete sentences
+                # Process complete sentences/phrases
                 to_process = ""
+                
+                # Iterate up to the second to last element (last element is what comes after last punctuation)
+                # If the last char of buffer was punctuation, parts[-1] is empty.
+                
+                # We need to be careful with the reconstruction.
+                # Example: "Hello, world." -> ['Hello', ',', ' world', '.', '']
+                
+                # We want to process everything up to the last found punctuation that triggered the split
+                
+                current_chunk = ""
+                last_processed_index = -1
+                
                 for i in range(0, len(parts)-1, 2):
-                    sentence = parts[i] + parts[i+1]
-                    to_process += sentence
+                    phrase = parts[i] + parts[i+1]
+                    current_chunk += phrase
+                    
+                    # If this chunk ends with strong punctuation OR is long enough with weak punctuation
+                    is_strong = any(p in parts[i+1] for p in [".", "!", "?", "\n"])
+                    is_weak = any(p in parts[i+1] for p in [",", ";", ":"])
+                    
+                    if is_strong or (is_weak and len(current_chunk) > 30):
+                        to_process += current_chunk
+                        current_chunk = ""
                 
-                # Keep the remainder
-                buffer = parts[-1]
+                # Whatever remains in current_chunk is not ready to be processed yet (unless we force it, but let's keep it in buffer)
+                # Actually, simpler logic: process everything that was split.
                 
-                if to_process.strip():
-                    audio_bytes = asyncio.run(self._generate_audio_chunk(to_process))
-                    yield self._convert_bytes_to_pcm(audio_bytes)
+                # Re-do: simpler approach.
+                # Just take everything except the last part if it doesn't end in punctuation
+                
+                to_process = ""
+                new_buffer = ""
+                
+                # Reconstruct
+                reconstructed = ""
+                for i in range(0, len(parts)-1, 2):
+                    reconstructed += parts[i] + parts[i+1]
+                reconstructed += parts[-1]
+                
+                # If we are here, we know we have some punctuation.
+                # Let's just process up to the last punctuation found.
+                
+                # Find the LAST punctuation index in the original buffer
+                last_punct_idx = -1
+                for punct in [".", "!", "?", "\n", ",", ";", ":"]:
+                    idx = buffer.rfind(punct)
+                    if idx > last_punct_idx:
+                        last_punct_idx = idx
+                
+                if last_punct_idx != -1:
+                    to_process = buffer[:last_punct_idx+1]
+                    buffer = buffer[last_punct_idx+1:]
+                    
+                    if to_process.strip():
+                        audio_bytes = await self._generate_audio_chunk(to_process)
+                        yield await self._convert_bytes_to_pcm(audio_bytes)
 
         # Process remaining buffer
         if buffer.strip():
-            audio_bytes = asyncio.run(self._generate_audio_chunk(buffer))
-            yield self._convert_bytes_to_pcm(audio_bytes)
+            audio_bytes = await self._generate_audio_chunk(buffer)
+            yield await self._convert_bytes_to_pcm(audio_bytes)
 
-    def _convert_bytes_to_pcm(self, audio_bytes):
+    async def _convert_bytes_to_pcm(self, audio_bytes):
         """
-        Convert mp3 bytes from edge-tts to raw pcm int16 16000Hz using ffmpeg
+        Convert mp3 bytes from edge-tts to raw pcm int16 16000Hz using ffmpeg.
+        Runs in executor to avoid blocking event loop.
         """
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self._convert_bytes_to_pcm_sync, audio_bytes)
+
+    def _convert_bytes_to_pcm_sync(self, audio_bytes):
         try:
             # Use ffmpeg to convert directly to s16le 16000Hz
             out, _ = (

@@ -1,5 +1,5 @@
 import os
-from groq import Groq
+from groq import AsyncGroq
 from src.utils.config import Config
 
 class LLMManager:
@@ -8,23 +8,32 @@ class LLMManager:
         self.client = None
         if self.api_key:
             try:
-                self.client = Groq(api_key=self.api_key)
+                self.client = AsyncGroq(api_key=self.api_key)
                 print("[LLM] Groq Client initialized successfully.")
             except Exception as e:
                 print(f"[LLM] Error initializing Groq client: {e}")
         
         self.system_prompt = (
-            "You are a friendly, patient, and highly skilled English teacher. "
-            "Your goal is to help the user practice English through natural, fluid conversation. "
-            "1. Speak primarily in English. "
-            "2. Keep your responses concise (1-3 sentences) to maintain a fast conversational pace. "
-            "3. If the user makes a mistake, gently correct them or rephrase it correctly in your reply, but don't be pedantic. "
-            "4. If the user speaks Spanish, answer their question but encourage them to try saying it in English. "
-            "5. Be engaging and ask follow-up questions to keep the dialogue going."
+            "You are a friendly, patient, and highly skilled English teacher on the Verba platform. "
+            "Your goal is to help the user practice English through natural, fluid conversation.\n\n"
+            "Conversation Rules:\n"
+            "1. Prioritize open-ended questions and keep your turns short (1-3 sentences).\n"
+            "2. Do not monopolize the conversation or give long explanations.\n"
+            "3. Correct errors only when they add pedagogical value, and do so briefly and clearly.\n"
+            "4. Adapt your vocabulary level and complexity to the student.\n"
+            "5. Maintain a close, professional, and motivating tone.\n"
+            "6. Redirect the conversation if the student gets stuck, offering support without breaking the flow.\n\n"
+            "Pedagogical Logic:\n"
+            "1. Each intervention must have a clear pedagogical intent (fluency, pronunciation, vocabulary, or confidence).\n"
+            "2. Avoid closed-ended responses; foster dialogue continuity.\n"
+            "3. If the student answers briefly, rephrase or expand the question.\n"
+            "4. If the student speaks a lot, listen and continue with a natural follow-up question.\n"
+            "5. The success of the conversation is measured by the student's effective speaking time, naturalness, and continuity, not by the quantity of corrections.\n\n"
+            "Speak primarily in English. If the user speaks Spanish, answer in English but encourage them."
         )
         self.history = [{"role": "system", "content": self.system_prompt}]
 
-    def generate_response(self, text):
+    async def generate_response(self, text):
         """
         Generate a response for the given input text using Groq.
         """
@@ -33,7 +42,7 @@ class LLMManager:
         if self.client:
             try:
                 # Using Llama 3.1 8b for speed/quality balance on Groq
-                stream = self.client.chat.completions.create(
+                stream = await self.client.chat.completions.create(
                     model="llama-3.1-8b-instant", 
                     messages=self.history,
                     stream=True,
@@ -42,7 +51,7 @@ class LLMManager:
                 )
                 
                 full_response = ""
-                for chunk in stream:
+                async for chunk in stream:
                     if chunk.choices[0].delta.content:
                         content = chunk.choices[0].delta.content
                         full_response += content
