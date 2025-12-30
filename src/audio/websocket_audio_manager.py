@@ -17,15 +17,17 @@ class WebSocketAudioManager:
     def stop(self):
         self.is_running = False
 
-    def read_frame(self):
+    async def read_frame(self):
         """
         Reads a frame from the input queue (filled by the websocket receiver).
         Matches the interface of AudioStreamManager.
         """
         try:
-            # Non-blocking get with timeout to allow checking is_running
-            return self.input_queue.get(timeout=0.1)
-        except queue.Empty:
+            # Async get
+            return await self.input_queue.get()
+        except asyncio.CancelledError:
+            return None
+        except Exception:
             return None
 
     def play_audio(self, audio_data, interrupt_check_callback=None):
