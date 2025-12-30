@@ -1,5 +1,5 @@
 import os
-from groq import Groq
+from groq import AsyncGroq
 from src.utils.config import Config
 
 class LLMManager:
@@ -8,7 +8,7 @@ class LLMManager:
         self.client = None
         if self.api_key:
             try:
-                self.client = Groq(api_key=self.api_key)
+                self.client = AsyncGroq(api_key=self.api_key)
                 print("[LLM] Groq Client initialized successfully.")
             except Exception as e:
                 print(f"[LLM] Error initializing Groq client: {e}")
