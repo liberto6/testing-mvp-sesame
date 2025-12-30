@@ -14,8 +14,8 @@ uvicorn
 websockets
 python-multipart
 jinja2
-nvidia-cudnn-cu11==8.9.2.26
-nvidia-cublas-cu11==11.10.3.66
+nvidia-cudnn-cu12
+nvidia-cublas-cu12
 
 
 
