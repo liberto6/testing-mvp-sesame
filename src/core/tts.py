@@ -9,7 +9,7 @@ class TTSManager:
     def __init__(self):
         # Using a high quality English voice for teaching
         # en-US-GuyNeural is a standard, clear American male voice
-        self.voice = "en-US-GuyNeural" 
+        self.voice = Config.TTS_VOICE
         # Other options: en-US-AriaNeural (Female), en-GB-RyanNeural (British Male)
 
     async def _generate_audio_chunk(self, text):
@@ -33,9 +33,8 @@ class TTSManager:
         # We need to buffer text slightly to form coherent sentences for TTS
         buffer = ""
         
-        # text_stream is a synchronous generator (from LLM), so we iterate it synchronously
-        # or we wrap it. If it's just a generator object:
-        for text_chunk in text_stream:
+        # text_stream is an async generator (from LLM)
+        async for text_chunk in text_stream:
             buffer += text_chunk
             
             # Simple heuristic: split by punctuation to send to TTS
@@ -112,17 +111,22 @@ class TTSManager:
                     
                     if to_process.strip():
                         audio_bytes = await self._generate_audio_chunk(to_process)
-                        yield self._convert_bytes_to_pcm(audio_bytes)
+                        yield await self._convert_bytes_to_pcm(audio_bytes)
 
         # Process remaining buffer
         if buffer.strip():
             audio_bytes = await self._generate_audio_chunk(buffer)
-            yield self._convert_bytes_to_pcm(audio_bytes)
+            yield await self._convert_bytes_to_pcm(audio_bytes)
 
-    def _convert_bytes_to_pcm(self, audio_bytes):
+    async def _convert_bytes_to_pcm(self, audio_bytes):
         """
-        Convert mp3 bytes from edge-tts to raw pcm int16 16000Hz using ffmpeg
+        Convert mp3 bytes from edge-tts to raw pcm int16 16000Hz using ffmpeg.
+        Runs in executor to avoid blocking event loop.
         """
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, self._convert_bytes_to_pcm_sync, audio_bytes)
+
+    def _convert_bytes_to_pcm_sync(self, audio_bytes):
         try:
             # Use ffmpeg to convert directly to s16le 16000Hz
             out, _ = (

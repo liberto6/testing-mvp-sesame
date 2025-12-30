@@ -61,11 +61,25 @@
                 };
 
                 ws.onmessage = async (event) => {
-                    // Receive audio blob from server
-                    const blob = event.data;
-                    const arrayBuffer = await blob.arrayBuffer();
-                    playAudioChunk(arrayBuffer);
-                };
+            // Handle different message types
+            if (typeof event.data === "string") {
+                // Text frame (JSON control message)
+                try {
+                    const msg = JSON.parse(event.data);
+                    if (msg.type === "CLEAR_BUFFER") {
+                        log("Clear Buffer received");
+                        clearAudioBuffer();
+                    }
+                } catch (e) {
+                    log("Error parsing JSON: " + e);
+                }
+            } else {
+                // Binary frame (Audio Blob)
+                const blob = event.data;
+                const arrayBuffer = await blob.arrayBuffer();
+                playAudioChunk(arrayBuffer);
+            }
+        };
 
                 ws.onclose = () => {
                     log('WebSocket Disconnected');
@@ -138,17 +152,19 @@
 
         // Playback Queue
         let nextStartTime = 0;
+        let scheduledSources = [];
         
+        function clearAudioBuffer() {
+            log("Clearing audio buffer...");
+            scheduledSources.forEach(source => {
+                try { source.stop(); } catch(e) {}
+            });
+            scheduledSources = [];
+            nextStartTime = audioContext.currentTime;
+        }
+
         function playAudioChunk(arrayBuffer) {
-            // Decode raw PCM? No, server sends raw PCM bytes?
-            // Actually, server sends what EdgeTTS produces (mp3) or raw?
-            // EdgeTTS produces MP3 by default. PyAudio plays raw.
-            // Wait, Orchestrator receives from EdgeTTS. 
-            // If EdgeTTS is sending MP3, PyAudio implementation might fail if it expects raw.
-            // Let's check tts.py.
-            
-            // Assuming the server sends raw PCM or we decode it here.
-            // If server sends raw Int16 PCM:
+            // Assuming the server sends raw Int16 PCM:
             const audioData = new Int16Array(arrayBuffer);
             const floatData = new Float32Array(audioData.length);
             for(let i=0; i<audioData.length; i++) {
@@ -162,11 +178,20 @@
             source.buffer = buffer;
             source.connect(audioContext.destination);
             
+            source.onended = () => {
+                const index = scheduledSources.indexOf(source);
+                if (index > -1) {
+                    scheduledSources.splice(index, 1);
+                }
+            };
+
             if (nextStartTime < audioContext.currentTime) {
                 nextStartTime = audioContext.currentTime;
             }
             source.start(nextStartTime);
             nextStartTime += buffer.duration;
+            
+            scheduledSources.push(source);
         }
     </script>
 </body>

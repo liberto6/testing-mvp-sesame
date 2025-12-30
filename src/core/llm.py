@@ -24,7 +24,7 @@ class LLMManager:
         )
         self.history = [{"role": "system", "content": self.system_prompt}]
 
-    def generate_response(self, text):
+    async def generate_response(self, text):
         """
         Generate a response for the given input text using Groq.
         """
@@ -33,7 +33,7 @@ class LLMManager:
         if self.client:
             try:
                 # Using Llama 3.1 8b for speed/quality balance on Groq
-                stream = self.client.chat.completions.create(
+                stream = await self.client.chat.completions.create(
                     model="llama-3.1-8b-instant", 
                     messages=self.history,
                     stream=True,
@@ -42,7 +42,7 @@ class LLMManager:
                 )
                 
                 full_response = ""
-                for chunk in stream:
+                async for chunk in stream:
                     if chunk.choices[0].delta.content:
                         content = chunk.choices[0].delta.content
                         full_response += content

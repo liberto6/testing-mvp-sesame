@@ -52,6 +52,17 @@ class WebSocketAudioManager:
         except Exception as e:
             print(f"Error sending audio to websocket: {e}")
 
+    def clear_audio_buffer(self):
+        """
+        Sends a signal to the client to clear its audio buffer (stop playback).
+        """
+        if not self.is_running:
+            return
+        try:
+            asyncio.create_task(self.websocket.send_json({"type": "CLEAR_BUFFER"}))
+        except Exception as e:
+            print(f"Error sending clear buffer signal: {e}")
+
     def add_input_audio(self, audio_bytes):
         """
         Called by the FastAPI route when new bytes arrive from client.
@@ -70,7 +81,7 @@ class WebSocketAudioManager:
             while len(self.buffer) >= chunk_size:
                 chunk = self.buffer[:chunk_size]
                 self.buffer = self.buffer[chunk_size:]
-                self.input_queue.put(chunk)
+                self.input_queue.put_nowait(chunk)
                 
         except Exception as e:
             print(f"Error processing input audio: {e}")

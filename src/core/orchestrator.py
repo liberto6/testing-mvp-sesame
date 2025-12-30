@@ -45,6 +45,9 @@ class Orchestrator:
                 if is_speech:
                     print("\n[!] Interruption detected!")
                     self.should_interrupt = True
+                    # Clear frontend buffer immediately
+                    self.audio.clear_audio_buffer()
+                    
                     # Start buffering this new speech
                     self.speech_buffer = [frame]
                     self.is_speech_active = True
@@ -75,11 +78,12 @@ class Orchestrator:
             self.audio.stop()
 
     async def _handle_listening(self):
-        # Non-blocking read from queue
+        # Async read from queue (waits until data is available)
         try:
-            frame = self.audio.read_frame()
+            frame = await self.audio.read_frame()
             if frame is None:
-                await asyncio.sleep(0.005) # Wait a bit for audio
+                # This happens if queue is closed or error
+                await asyncio.sleep(0.01)
                 return
 
             # VAD Check
