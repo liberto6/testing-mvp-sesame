@@ -135,9 +135,24 @@ class Orchestrator:
         asr_duration = time.perf_counter() - asr_start
         print(f"[Pipeline] ✅ ASR Finished in {asr_duration:.3f}s. User said: '{text}'")
         
+        # --- Turn-Taking Logic ---
+        # 1. Check for incomplete phrases or hesitation
+        # If the user is just hesitating ("um", "ah") or the sentence trails off ("..."), 
+        # we should continue listening instead of responding.
+        
+        is_hesitation = text.strip().lower() in ["um", "uh", "ah", "hmm", "well", "so", "like"]
+        is_trailing = text.strip().endswith("...")
+        
+        if is_hesitation or is_trailing:
+            print(f"[Pipeline] ⏳ Detected hesitation/incomplete phrase. continuing listening...")
+            self.state = "LISTENING"
+            # We DO NOT clear self.speech_buffer here. 
+            # The next frames will be appended, and we'll re-transcribe the whole context next time.
+            return
+
         if not text.strip():
             self.state = "LISTENING"
-            self.speech_buffer = []
+            self.speech_buffer = [] # Clear buffer if it was just silence/noise that produced no text
             return
 
         # 2. LLM

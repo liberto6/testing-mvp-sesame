@@ -13,7 +13,7 @@ class Config:
     # VAD settings
     VAD_THRESHOLD = 0.5
     MIN_SPEECH_DURATION_MS = 250
-    MIN_SILENCE_DURATION_MS = 350
+    MIN_SILENCE_DURATION_MS = 800  # Increased to 800ms for more natural turn-taking and thinking pauses
     
     # TTS Settings
     TTS_VOICE = "en-US-GuyNeural" # 'en-US-AriaNeural', 'en-GB-RyanNeural'
