@@ -47,12 +47,8 @@ class WebSocketAudioManager:
 
         # Send to WebSocket (thread-safe)
         try:
-            future = asyncio.run_coroutine_threadsafe(
-                self.websocket.send_bytes(audio_bytes), 
-                self.loop
-            )
-            # Optional: wait for it to be sent? usually fire and forget is faster for streaming
-            # future.result() 
+            # We are running in the same event loop now, so we can just spawn a task
+            asyncio.create_task(self.websocket.send_bytes(audio_bytes))
         except Exception as e:
             print(f"Error sending audio to websocket: {e}")
 

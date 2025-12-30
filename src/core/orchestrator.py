@@ -21,6 +21,9 @@ class Orchestrator:
         self.should_interrupt = False
         self.stop_event = asyncio.Event()
 
+    def stop(self):
+        self.stop_event.set()
+
     def process_audio_frame(self, frame):
         """
         Process a single audio frame: VAD check.
