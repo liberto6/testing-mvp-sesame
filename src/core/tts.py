@@ -17,12 +17,23 @@ class TTSManager:
         """
         Internal async method to generate audio.
         """
+        # Security check: ensure there is speakable content
+        # This prevents crashes with inputs like '"' or '...' that yield no audio from EdgeTTS
+        if not any(c.isalnum() for c in text):
+            # print(f"[TTS] Skipping non-speakable text: '{text}'")
+            return b""
+
         try:
             communicate = edge_tts.Communicate(text, self.voice)
             audio_data = b""
             async for chunk in communicate.stream():
                 if chunk["type"] == "audio":
                     audio_data += chunk["data"]
+            
+            if not audio_data:
+                print(f"[TTS] Warning: No audio received for text '{text}'")
+                return b""
+                
             return audio_data
         except Exception as e:
             print(f"[TTS] Error generating chunk for text '{text}': {e}")
@@ -116,12 +127,14 @@ class TTSManager:
                     
                     if to_process.strip():
                         audio_bytes = await self._generate_audio_chunk(to_process)
-                        yield await self._convert_bytes_to_pcm(audio_bytes)
+                        if audio_bytes:
+                            yield await self._convert_bytes_to_pcm(audio_bytes)
 
         # Process remaining buffer
         if buffer.strip():
             audio_bytes = await self._generate_audio_chunk(buffer)
-            yield await self._convert_bytes_to_pcm(audio_bytes)
+            if audio_bytes:
+                yield await self._convert_bytes_to_pcm(audio_bytes)
 
     async def _convert_bytes_to_pcm(self, audio_bytes):
         """
@@ -132,6 +145,9 @@ class TTSManager:
         return await loop.run_in_executor(None, self._convert_bytes_to_pcm_sync, audio_bytes)
 
     def _convert_bytes_to_pcm_sync(self, audio_bytes):
+        if not audio_bytes:
+            return np.zeros(0, dtype=np.int16)
+            
         try:
             # Use ffmpeg to convert directly to s16le 16000Hz
             out, _ = (
