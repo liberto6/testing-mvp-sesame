@@ -20,6 +20,7 @@ class Orchestrator:
         self.state = "LISTENING" # LISTENING, PROCESSING, SPEAKING
         self.should_interrupt = False
         self.stop_event = asyncio.Event()
+        self.estimated_playback_end = 0
 
     def stop(self):
         self.stop_event.set()
@@ -46,7 +47,7 @@ class Orchestrator:
                     print("\n[!] Interruption detected!")
                     self.should_interrupt = True
                     # Clear frontend buffer immediately
-                    self.audio.clear_audio_buffer()
+                    await self.audio.clear_audio_buffer()
                     
                     # Start buffering this new speech
                     self.speech_buffer = [frame]
@@ -94,6 +95,17 @@ class Orchestrator:
                     print("\n[User] Started speaking...")
                     self.is_speech_active = True
                     self.speech_buffer = []
+                    
+                    # FORCE STOP PLAYBACK ON CLIENT
+                    # The user might interrupt while audio is still playing in the browser buffer
+                    # even if the server finished sending it.
+                    
+                    # Check if we are interrupting active playback (latent interruption)
+                    if time.time() < self.estimated_playback_end:
+                         print("\n[!] Interruption detected!")
+                         print("[Pipeline] 🛑 Playback interrupted by user.")
+                         
+                    await self.audio.clear_audio_buffer()
                 
                 self.speech_buffer.append(frame)
                 self.silence_frames = 0
@@ -172,37 +184,63 @@ class Orchestrator:
         self.state = "SPEAKING"
         self.should_interrupt = False
         
-        # We need to interleave generation and playback while checking for interruption
-        # Since TTS generation is now async, we use 'async for'
+        # We define a helper task for generation to allow concurrent interruption checks
+        stop_signal = asyncio.Event()
         
-        first_chunk = True
-        
-        async for audio_chunk in self.tts.generate_audio(response_stream):
-            # Check for interruption before playing
-            if await self.interruption_check():
-                print("[Pipeline] 🛑 Playback interrupted by user.")
-                break
+        async def generate_and_play():
+            first_chunk = True
+            try:
+                async for audio_chunk in self.tts.generate_audio(response_stream):
+                    if stop_signal.is_set():
+                        break
+                    
+                    if first_chunk:
+                        time_to_first_audio = time.perf_counter() - turn_start
+                        ttft = time.perf_counter() - llm_start
+                        print(f"\n[Pipeline] ⚡ LATENCY REPORT:")
+                        print(f"  - Total Latency (End-of-Speech -> Audio): {time_to_first_audio:.3f}s")
+                        print(f"  - ASR Duration: {asr_duration:.3f}s")
+                        print(f"  - Processing (LLM+TTS) Latency: {ttft:.3f}s")
+                        print("-" * 40)
+                        first_chunk = False
 
-            if first_chunk:
-                time_to_first_audio = time.perf_counter() - turn_start
-                ttft = time.perf_counter() - llm_start
-                print(f"\n[Pipeline] ⚡ LATENCY REPORT:")
-                print(f"  - Total Latency (End-of-Speech -> Audio): {time_to_first_audio:.3f}s")
-                print(f"  - ASR Duration: {asr_duration:.3f}s")
-                print(f"  - Processing (LLM+TTS) Latency: {ttft:.3f}s")
-                print("-" * 40)
-                first_chunk = False
-            
-            # Play audio (blocking for the chunk duration, but we can check interrupt between chunks)
-            # For better async, we would push to an audio queue and have a separate player task.
-            # Here we do a simple blocking write but check inputs.
-            self.audio.play_audio(audio_chunk, interrupt_check_callback=lambda: self.should_interrupt)
-            
-            # Check immediately after play
+                    # Check interruption before playing
+                    if stop_signal.is_set():
+                        break
+                        
+                    await self.audio.play_audio(audio_chunk, interrupt_check_callback=lambda: stop_signal.is_set())
+                    
+                    # Update estimated playback end time
+                    # audio_chunk is int16 (2 bytes) at 16000Hz
+                    duration = len(audio_chunk) / 2 / 16000
+                    now = time.time()
+                    if self.estimated_playback_end < now:
+                        self.estimated_playback_end = now + duration
+                    else:
+                        self.estimated_playback_end += duration
+                        
+            except Exception as e:
+                print(f"Error in generation task: {e}")
+
+        # Start generation task
+        generation_task = asyncio.create_task(generate_and_play())
+        
+        # Monitor for interruptions while generation is running
+        while not generation_task.done():
+            # Check for interruption
             if await self.interruption_check():
                 print("[Pipeline] 🛑 Playback interrupted by user.")
-                break
-        
+                stop_signal.set()
+                generation_task.cancel()
+                try:
+                    await generation_task
+                except asyncio.CancelledError:
+                    pass
+                return # Return immediately, state is already LISTENING set by interruption_check
+            
+            # Yield to let generation task run
+            await asyncio.sleep(0.02) # Check every 20ms
+            
         if not self.should_interrupt:
             total_turn_duration = time.perf_counter() - turn_start
             print(f"[Pipeline] 🏁 Turn finished. Total duration: {total_turn_duration:.3f}s")
