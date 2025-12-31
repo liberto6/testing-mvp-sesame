@@ -20,6 +20,7 @@ class Orchestrator:
         self.state = "LISTENING" # LISTENING, PROCESSING, SPEAKING
         self.should_interrupt = False
         self.stop_event = asyncio.Event()
+        self.estimated_playback_end = 0
 
     def stop(self):
         self.stop_event.set()
@@ -98,6 +99,12 @@ class Orchestrator:
                     # FORCE STOP PLAYBACK ON CLIENT
                     # The user might interrupt while audio is still playing in the browser buffer
                     # even if the server finished sending it.
+                    
+                    # Check if we are interrupting active playback (latent interruption)
+                    if time.time() < self.estimated_playback_end:
+                         print("\n[!] Interruption detected!")
+                         print("[Pipeline] 🛑 Playback interrupted by user.")
+                         
                     await self.audio.clear_audio_buffer()
                 
                 self.speech_buffer.append(frame)
@@ -202,6 +209,16 @@ class Orchestrator:
                         break
                         
                     await self.audio.play_audio(audio_chunk, interrupt_check_callback=lambda: stop_signal.is_set())
+                    
+                    # Update estimated playback end time
+                    # audio_chunk is int16 (2 bytes) at 16000Hz
+                    duration = len(audio_chunk) / 2 / 16000
+                    now = time.time()
+                    if self.estimated_playback_end < now:
+                        self.estimated_playback_end = now + duration
+                    else:
+                        self.estimated_playback_end += duration
+                        
             except Exception as e:
                 print(f"Error in generation task: {e}")
 
