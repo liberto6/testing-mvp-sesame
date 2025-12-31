@@ -46,7 +46,7 @@ class Orchestrator:
                     print("\n[!] Interruption detected!")
                     self.should_interrupt = True
                     # Clear frontend buffer immediately
-                    self.audio.clear_audio_buffer()
+                    await self.audio.clear_audio_buffer()
                     
                     # Start buffering this new speech
                     self.speech_buffer = [frame]
@@ -196,7 +196,7 @@ class Orchestrator:
                     if stop_signal.is_set():
                         break
                         
-                    self.audio.play_audio(audio_chunk, interrupt_check_callback=lambda: stop_signal.is_set())
+                    await self.audio.play_audio(audio_chunk, interrupt_check_callback=lambda: stop_signal.is_set())
             except Exception as e:
                 print(f"Error in generation task: {e}")
 

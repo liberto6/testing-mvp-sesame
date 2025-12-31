@@ -30,7 +30,7 @@ class WebSocketAudioManager:
         except Exception:
             return None
 
-    def play_audio(self, audio_data, interrupt_check_callback=None):
+    async def play_audio(self, audio_data, interrupt_check_callback=None):
         """
         Sends audio data back to the client via WebSocket.
         """
@@ -47,21 +47,20 @@ class WebSocketAudioManager:
         else:
             audio_bytes = audio_data
 
-        # Send to WebSocket (thread-safe)
+        # Send to WebSocket
         try:
-            # We are running in the same event loop now, so we can just spawn a task
-            asyncio.create_task(self.websocket.send_bytes(audio_bytes))
+            await self.websocket.send_bytes(audio_bytes)
         except Exception as e:
             print(f"Error sending audio to websocket: {e}")
 
-    def clear_audio_buffer(self):
+    async def clear_audio_buffer(self):
         """
         Sends a signal to the client to clear its audio buffer (stop playback).
         """
         if not self.is_running:
             return
         try:
-            asyncio.create_task(self.websocket.send_json({"type": "CLEAR_BUFFER"}))
+            await self.websocket.send_json({"type": "CLEAR_BUFFER"})
         except Exception as e:
             print(f"Error sending clear buffer signal: {e}")
 
