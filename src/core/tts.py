@@ -17,12 +17,16 @@ class TTSManager:
         """
         Internal async method to generate audio.
         """
-        communicate = edge_tts.Communicate(text, self.voice)
-        audio_data = b""
-        async for chunk in communicate.stream():
-            if chunk["type"] == "audio":
-                audio_data += chunk["data"]
-        return audio_data
+        try:
+            communicate = edge_tts.Communicate(text, self.voice)
+            audio_data = b""
+            async for chunk in communicate.stream():
+                if chunk["type"] == "audio":
+                    audio_data += chunk["data"]
+            return audio_data
+        except Exception as e:
+            print(f"[TTS] Error generating chunk for text '{text}': {e}")
+            return b""
 
     async def generate_audio(self, text_stream):
         """

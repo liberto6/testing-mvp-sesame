@@ -94,6 +94,11 @@ class Orchestrator:
                     print("\n[User] Started speaking...")
                     self.is_speech_active = True
                     self.speech_buffer = []
+                    
+                    # FORCE STOP PLAYBACK ON CLIENT
+                    # The user might interrupt while audio is still playing in the browser buffer
+                    # even if the server finished sending it.
+                    await self.audio.clear_audio_buffer()
                 
                 self.speech_buffer.append(frame)
                 self.silence_frames = 0
