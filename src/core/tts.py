@@ -4,6 +4,8 @@ import numpy as np
 import io
 import soundfile as sf
 import ffmpeg
+import aiohttp
+import base64
 from src.utils.config import Config
 
 class TTSManager:
@@ -12,6 +14,45 @@ class TTSManager:
         # en-US-GuyNeural is a standard, clear American male voice
         self.voice = Config.TTS_VOICE
         # Other options: en-US-AriaNeural (Female), en-GB-RyanNeural (British Male)
+        print(f"[TTS] Initialized using provider: {Config.TTS_PROVIDER}")
+
+    async def _generate_inworld(self, text):
+        """
+        Generate audio using Inworld API.
+        """
+        if not Config.INWORLD_API_KEY:
+            print("[TTS] Error: INWORLD_API_KEY not set.")
+            return b""
+
+        url = "https://api.inworld.ai/tts/v1/voice"
+        headers = {
+            "Authorization": f"Basic {Config.INWORLD_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "text": text,
+            "voiceId": Config.INWORLD_VOICE_ID,
+            "modelId": Config.INWORLD_MODEL_ID,
+            "outputFormat": "mp3" 
+        }
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json=payload, headers=headers) as response:
+                    if response.status != 200:
+                        error_text = await response.text()
+                        print(f"[TTS] Inworld API Error: {response.status} - {error_text}")
+                        return b""
+                    
+                    data = await response.json()
+                    if "audioContent" in data:
+                        return base64.b64decode(data["audioContent"])
+                    else:
+                        print(f"[TTS] Warning: Inworld response missing 'audioContent'. Keys: {list(data.keys())}")
+                        return b""
+        except Exception as e:
+            print(f"[TTS] Error calling Inworld API: {e}")
+            return b""
 
     async def _generate_audio_chunk(self, text):
         """
@@ -22,6 +63,9 @@ class TTSManager:
         if not any(c.isalnum() for c in text):
             # print(f"[TTS] Skipping non-speakable text: '{text}'")
             return b""
+
+        if Config.TTS_PROVIDER == "inworld":
+            return await self._generate_inworld(text)
 
         try:
             communicate = edge_tts.Communicate(text, self.voice)

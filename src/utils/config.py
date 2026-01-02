@@ -16,7 +16,13 @@ class Config:
     MIN_SILENCE_DURATION_MS = 800  # Increased to 800ms for more natural turn-taking and thinking pauses
     
     # TTS Settings
-    TTS_VOICE = "en-US-GuyNeural" # 'en-US-AriaNeural', 'en-GB-RyanNeural'
+    TTS_PROVIDER = "inworld" # 'edge-tts' or 'inworld'
+    TTS_VOICE = "en-US-GuyNeural" # Used for EdgeTTS
+    
+    # Inworld TTS Settings
+    INWORLD_API_KEY = os.getenv("INWORLD_API_KEY")
+    INWORLD_VOICE_ID = "Ashley" # Default voice ID
+    INWORLD_MODEL_ID = "inworld-tts-1"
 
     # Models
     WHISPER_MODEL_SIZE = "base.en"  # 'base.en' is slightly better/faster than tiny multilingual for English
