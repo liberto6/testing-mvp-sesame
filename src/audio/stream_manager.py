@@ -43,7 +43,7 @@ class AudioStreamManager:
             output=True
         )
 
-    def play_audio(self, audio_data, interrupt_check_callback=None):
+    async def play_audio(self, audio_data, interrupt_check_callback=None):
         """
         Play audio data. 
         interrupt_check_callback: function that returns True if playback should stop.
@@ -55,7 +55,7 @@ class AudioStreamManager:
         else:
             audio_bytes = audio_data
 
-        # Write in chunks to allow interruption
+        # Write in chunks to allow interruption and async yielding
         chunk_size = 1024
         for i in range(0, len(audio_bytes), chunk_size):
             if not self.is_playing:
@@ -65,13 +65,31 @@ class AudioStreamManager:
                 self.is_playing = False
                 break
 
+            # Write chunk (blocking but short)
             self.output_stream.write(audio_bytes[i:i+chunk_size])
+            
+            # Yield to event loop to allow other tasks (like interruption check) to run
+            await asyncio.sleep(0.001)
         
         self.is_playing = False
 
     def stop_playback(self):
         """Interrupts current playback."""
         self.is_playing = False
+
+    async def clear_audio_buffer(self):
+        """
+        Clears the input queue and stops playback.
+        """
+        # Clear input queue
+        while not self.input_queue.empty():
+            try:
+                self.input_queue.get_nowait()
+            except queue.Empty:
+                break
+        
+        # Stop playback
+        self.stop_playback()
 
     def start(self):
         self.is_running = True
@@ -89,8 +107,9 @@ class AudioStreamManager:
             self.output_stream.close()
         self.p.terminate()
 
-    def read_frame(self):
+    async def read_frame(self):
         try:
-            return self.input_queue.get(timeout=0.1)
+            return self.input_queue.get_nowait()
         except queue.Empty:
+            await asyncio.sleep(0.01)
             return None
