@@ -77,29 +77,10 @@ class TTSManager:
         Internal async method to generate audio.
         """
         # Security check: ensure there is speakable content
-        # This prevents crashes with inputs like '"' or '...' that yield no audio from EdgeTTS
         if not any(c.isalnum() for c in text):
-            # print(f"[TTS] Skipping non-speakable text: '{text}'")
             return b""
 
-        if Config.TTS_PROVIDER == "inworld":
-            return await self._generate_inworld(text)
-
-        try:
-            communicate = edge_tts.Communicate(text, self.voice)
-            audio_data = b""
-            async for chunk in communicate.stream():
-                if chunk["type"] == "audio":
-                    audio_data += chunk["data"]
-            
-            if not audio_data:
-                print(f"[TTS] Warning: No audio received for text '{text}'")
-                return b""
-                
-            return audio_data
-        except Exception as e:
-            print(f"[TTS] Error generating chunk for text '{text}': {e}")
-            return b""
+        return await self._generate_inworld(text)
 
     async def generate_audio(self, text_stream):
         """
