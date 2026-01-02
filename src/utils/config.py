@@ -11,7 +11,7 @@ class Config:
     FORMAT = "int16"
     
     # VAD settings
-    VAD_THRESHOLD = 0.5
+    VAD_THRESHOLD = 0.9
     MIN_SPEECH_DURATION_MS = 400
     MIN_SILENCE_DURATION_MS = 800    # Increased to 800ms for more natural turn-taking and thinking pauses
     
