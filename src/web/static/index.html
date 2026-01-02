@@ -16,6 +16,9 @@
         .indicator { width: 20px; height: 20px; border-radius: 50%; background: #555; display: inline-block; margin-left: 10px; }
         .indicator.active { background: #0f0; box-shadow: 0 0 10px #0f0; }
         #log { width: 80%; max-width: 600px; height: 200px; background: #000; overflow-y: scroll; padding: 10px; border: 1px solid #444; font-family: monospace; font-size: 12px; margin-top: 20px; }
+        .controls { margin: 20px; padding: 15px; background: #333; border-radius: 8px; text-align: center; }
+        select { padding: 8px; border-radius: 4px; border: none; font-size: 16px; margin-right: 10px; }
+        .voice-group { display: flex; align-items: center; gap: 10px; justify-content: center; margin-bottom: 10px; }
     </style>
 </head>
 <body>
@@ -23,7 +26,17 @@
     <h1>Sesame Voice Assistant</h1>
     <div id="status">Status: Disconnected <span class="indicator" id="wsIndicator"></span></div>
 
-    <div>
+    <div class="controls">
+        <div class="voice-group">
+            <label for="voiceSelect">Voice:</label>
+            <select id="voiceSelect" onchange="changeVoice()">
+                <option value="Ashley">Ashley (Female)</option>
+                <option value="Wizard">Wizard (Male)</option>
+                <option value="Custom">Custom ID...</option>
+            </select>
+            <input type="text" id="customVoiceInput" placeholder="Enter Voice ID" style="display:none; padding:8px; border-radius:4px; border:none;" onchange="changeVoice()">
+        </div>
+        
         <button id="startBtn" class="btn" onclick="start()">Start Conversation</button>
         <button id="stopBtn" class="btn" onclick="stop()">Stop</button>
     </div>
@@ -45,6 +58,38 @@
             const div = document.getElementById('log');
             div.innerHTML += `<div>${new Date().toLocaleTimeString()} - ${msg}</div>`;
             div.scrollTop = div.scrollHeight;
+        }
+
+        async function changeVoice() {
+            const select = document.getElementById('voiceSelect');
+            const customInput = document.getElementById('customVoiceInput');
+            let voiceId = select.value;
+
+            if (voiceId === "Custom") {
+                customInput.style.display = "inline-block";
+                voiceId = customInput.value.trim();
+                if (!voiceId) return; // Don't send empty custom voice
+            } else {
+                customInput.style.display = "none";
+            }
+
+            log(`Changing voice to: ${voiceId}`);
+            
+            try {
+                const response = await fetch('/api/set_voice', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ voice_id: voiceId })
+                });
+                const result = await response.json();
+                if (result.status === 'ok') {
+                    log('Voice updated successfully.');
+                } else {
+                    log('Error updating voice: ' + result.message);
+                }
+            } catch (e) {
+                log('Error calling API: ' + e);
+            }
         }
 
         async function start() {

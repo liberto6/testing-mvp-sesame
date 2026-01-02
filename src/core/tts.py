@@ -15,7 +15,13 @@ class TTSManager:
         # en-US-GuyNeural is a standard, clear American male voice
         self.voice = Config.TTS_VOICE
         # Other options: en-US-AriaNeural (Female), en-GB-RyanNeural (British Male)
+        self.inworld_voice_id = Config.INWORLD_VOICE_ID
         print(f"[TTS] Initialized using provider: {Config.TTS_PROVIDER}")
+
+    def set_voice(self, voice_id: str):
+        """Update the voice ID dynamically"""
+        self.inworld_voice_id = voice_id
+        print(f"[TTS] Voice changed to: {voice_id}")
 
     async def _generate_inworld(self, text):
         """
@@ -32,7 +38,7 @@ class TTSManager:
         }
         payload = {
             "text": text,
-            "voiceId": Config.INWORLD_VOICE_ID,
+            "voiceId": self.inworld_voice_id,
             "modelId": Config.INWORLD_MODEL_ID,
             "outputFormat": "mp3" 
         }

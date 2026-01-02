@@ -1,9 +1,10 @@
 import asyncio
 import threading
 import os
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Body
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 from src.core.vad import VADManager
 from src.core.asr import ASRManager
 from src.core.llm import LLMManager
@@ -35,6 +36,20 @@ app = FastAPI(lifespan=lifespan)
 async def get():
     with open("src/web/static/index.html", "r") as f:
         return HTMLResponse(f.read())
+
+class VoiceRequest(BaseModel):
+    voice_id: str
+
+@app.post("/api/set_voice")
+async def set_voice(request: VoiceRequest):
+    """
+    Update the active TTS voice.
+    """
+    global tts
+    if tts:
+        tts.set_voice(request.voice_id)
+        return JSONResponse(content={"status": "ok", "message": f"Voice set to {request.voice_id}"})
+    return JSONResponse(content={"status": "error", "message": "TTS model not initialized"}, status_code=500)
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
