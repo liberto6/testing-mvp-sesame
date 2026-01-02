@@ -45,11 +45,12 @@ class TTSManager:
 
         # Robust connection settings
         # Force IPv4 to avoid DNS resolution issues in some pod environments
-        conn = aiohttp.TCPConnector(family=socket.AF_INET, ssl=False)
         timeout = aiohttp.ClientTimeout(total=10) # 10 seconds timeout
 
         for attempt in range(3):
             try:
+                # Create a new connector for each attempt to avoid "Session is closed" errors
+                conn = aiohttp.TCPConnector(family=socket.AF_INET, ssl=False)
                 async with aiohttp.ClientSession(connector=conn, timeout=timeout) as session:
                     async with session.post(url, json=payload, headers=headers) as response:
                         if response.status != 200:
@@ -70,6 +71,8 @@ class TTSManager:
                 print(f"[TTS] Error calling Inworld API (Attempt {attempt+1}): {e}")
                 if attempt < 2:
                     await asyncio.sleep(0.5)
+                    # Re-create connector if session closed unexpectedly
+                    conn = aiohttp.TCPConnector(family=socket.AF_INET, ssl=False)
                 else:
                     return b""
         return b""

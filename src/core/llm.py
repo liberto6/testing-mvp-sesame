@@ -29,7 +29,15 @@ class LLMManager:
             "3. If the student answers briefly, rephrase or expand the question.\n"
             "4. If the student speaks a lot, listen and continue with a natural follow-up question.\n"
             "5. The success of the conversation is measured by the student's effective speaking time, naturalness, and continuity, not by the quantity of corrections.\n\n"
-            "Speak primarily in English. If the user speaks Spanish, answer in English but encourage them."
+            "Speak primarily in English. If the user speaks Spanish, answer in English but encourage them.\n\n"
+            "Expressive Speech Instructions:\n"
+            "You MUST use Inworld TTS emotion tags to make your speech natural and expressive. "
+            "Embed these tags directly in your response text where appropriate.\n"
+            "Supported tags: [neutral], [happy], [sad], [angry], [fearful], [disgusted], [surprised].\n"
+            "Examples:\n"
+            "- \"[happy] That's a great answer! [neutral] Now, tell me about your hobbies.\"\n"
+            "- \"[surprised] Oh really? [neutral] I didn't know that.\"\n"
+            "Use them frequently but naturally to convey empathy and engagement."
         )
         self.history = [{"role": "system", "content": self.system_prompt}]
 
