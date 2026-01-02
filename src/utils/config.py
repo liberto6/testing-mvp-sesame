@@ -11,14 +11,11 @@ class Config:
     FORMAT = "int16"
     
     # VAD settings
-    VAD_THRESHOLD = 0.5
-    MIN_SPEECH_DURATION_MS = 250
+    VAD_THRESHOLD = 0.8
+    MIN_SPEECH_DURATION_MS = 400
     MIN_SILENCE_DURATION_MS = 800  # Increased to 800ms for more natural turn-taking and thinking pauses
     
     # TTS Settings
-    TTS_PROVIDER = "inworld" # 'edge-tts' or 'inworld'
-    TTS_VOICE = "en-US-GuyNeural" # Used for EdgeTTS
-    
     # Inworld TTS Settings
     INWORLD_API_KEY = os.getenv("INWORLD_API_KEY")
     INWORLD_VOICE_ID = "Ashley" # Default voice ID

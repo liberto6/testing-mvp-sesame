@@ -7,7 +7,6 @@ soundfile
 colorama
 groq
 python-dotenv
-edge-tts
 ffmpeg-python
 fastapi
 uvicorn

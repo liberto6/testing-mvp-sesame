@@ -1,5 +1,4 @@
 import asyncio
-import edge_tts
 import numpy as np
 import io
 import soundfile as sf
@@ -11,12 +10,8 @@ from src.utils.config import Config
 
 class TTSManager:
     def __init__(self):
-        # Using a high quality English voice for teaching
-        # en-US-GuyNeural is a standard, clear American male voice
-        self.voice = Config.TTS_VOICE
-        # Other options: en-US-AriaNeural (Female), en-GB-RyanNeural (British Male)
         self.inworld_voice_id = Config.INWORLD_VOICE_ID
-        print(f"[TTS] Initialized using provider: {Config.TTS_PROVIDER}")
+        print(f"[TTS] Initialized using Inworld TTS")
 
     def set_voice(self, voice_id: str):
         """Update the voice ID dynamically"""
@@ -111,7 +106,7 @@ class TTSManager:
         Generates audio from a text stream (iterator).
         Yields chunks of audio data (numpy array).
         """
-        print(f"\n[TTS] Starting generation with voice: {self.voice}")
+        print(f"\n[TTS] Starting generation with voice: {self.inworld_voice_id}")
         
         # We need to buffer text slightly to form coherent sentences for TTS
         buffer = ""
