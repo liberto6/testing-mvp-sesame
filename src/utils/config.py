@@ -22,7 +22,7 @@ class Config:
     INWORLD_MODEL_ID = "inworld-tts-1"
 
     # Models
-    WHISPER_MODEL_SIZE = "small"  # 'base.en' is slightly better/faster than tiny multilingual for English
+    WHISPER_MODEL_SIZE = "base.en"  # 'base.en' is slightly better/faster than tiny multilingual for English
     COMPUTE_TYPE = "int8"
     
     # API Keys

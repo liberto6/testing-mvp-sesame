@@ -31,13 +31,13 @@ class LLMManager:
             "5. The success of the conversation is measured by the student's effective speaking time, naturalness, and continuity, not by the quantity of corrections.\n\n"
             "Speak primarily in English. If the user speaks Spanish, answer in English but encourage them.\n\n"
             "Expressive Speech Instructions:\n"
-            "You MUST use Inworld TTS emotion tags to make your speech natural and expressive. "
-            "Embed these tags directly in your response text where appropriate.\n"
-            "Supported tags: [neutral], [happy], [sad], [angry], [fearful], [disgusted], [surprised].\n"
-            "Examples:\n"
-            "- \"[happy] That's a great answer! [neutral] Now, tell me about your hobbies.\"\n"
-            "- \"[surprised] Oh really? [neutral] I didn't know that.\"\n"
-            "Use them frequently but naturally to convey empathy and engagement."
+            "You can use Inworld TTS emotion tags to make your speech natural and expressive.\n"
+            "Rules for tags:\n"
+            "1. Use ONLY ONE tag at the VERY BEGINNING of your response.\n"
+            "2. Do NOT use tags in the middle of sentences.\n"
+            "3. Supported tags: [neutral], [happy], [sad], [angry], [fearful], [disgusted], [surprised].\n"
+            "4. Format: Strictly use square brackets, e.g., [happy]. Do not use parentheses () or asterisks *.\n"
+            "Example: \"[happy] That's a great answer! Now, tell me about your hobbies.\"\n"
         )
         self.history = [{"role": "system", "content": self.system_prompt}]
 

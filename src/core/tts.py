@@ -76,11 +76,28 @@ class TTSManager:
         """
         Internal async method to generate audio.
         """
+        # Clean text from multiple tags or middle-sentence tags
+        import re
+        
+        # 1. Find all supported tags
+        tags = re.findall(r'\[(neutral|happy|sad|angry|fearful|disgusted|surprised)\]', text)
+        
+        # 2. Strip all tags from the text to prevent "reading" them
+        clean_text = re.sub(r'\[.*?\]', '', text).strip()
+        clean_text = re.sub(r'\(.*?\)', '', clean_text).strip() # Also remove parentheses just in case
+        
+        # 3. If a valid tag was found, prepend ONLY the first one to the start
+        if tags:
+            # Reconstruct text with single tag at start
+            final_text = f"[{tags[0]}] {clean_text}"
+        else:
+            final_text = clean_text
+
         # Security check: ensure there is speakable content
-        if not any(c.isalnum() for c in text):
+        if not any(c.isalnum() for c in final_text):
             return b""
 
-        return await self._generate_inworld(text)
+        return await self._generate_inworld(final_text)
 
     async def generate_audio(self, text_stream):
         """
