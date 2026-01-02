@@ -15,6 +15,18 @@ class ASRManager:
             device=device, 
             compute_type=Config.COMPUTE_TYPE
         )
+        self._warmup()
+
+    def _warmup(self):
+        """Run a dummy inference to load model weights into VRAM."""
+        print("[ASR] Warming up model...")
+        try:
+            # Generate 1 second of silence
+            dummy_audio = np.zeros(16000, dtype=np.float32)
+            self.model.transcribe(dummy_audio, beam_size=1)
+            print("[ASR] Warmup complete!")
+        except Exception as e:
+            print(f"[ASR] Warmup failed: {e}")
 
     def transcribe(self, audio_data):
         """

@@ -40,12 +40,21 @@ class LLMManager:
             "Example: \"[happy] That's a great answer! Now, tell me about your hobbies.\"\n"
         )
         self.history = [{"role": "system", "content": self.system_prompt}]
+        self.max_history = 10  # Keep last 10 turns (5 user + 5 assistant)
+
+    def _prune_history(self):
+        """Keep only the system prompt and the last N turns."""
+        if len(self.history) > self.max_history + 1:
+            # Preserve system prompt (index 0)
+            # Keep last max_history items
+            self.history = [self.history[0]] + self.history[-self.max_history:]
 
     async def generate_response(self, text):
         """
         Generate a response for the given input text using Groq.
         """
         self.history.append({"role": "user", "content": text})
+        self._prune_history()
         
         if self.client:
             try:

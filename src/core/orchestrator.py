@@ -140,9 +140,17 @@ class Orchestrator:
         # 1. ASR (Sync for now, but fast)
         asr_start = time.perf_counter()
         print(f"\n[Pipeline] 🎤 Starting ASR...")
-        # Ideally run in executor to avoid blocking event loop
+        
+        # Use a dedicated thread pool for ASR to avoid blocking the main event loop
+        # and prevent it from interfering with other async tasks
         loop = asyncio.get_running_loop()
-        text = await loop.run_in_executor(None, self.asr.transcribe, audio_data)
+        import concurrent.futures
+        
+        # Ideally this executor should be created in __init__ and reused
+        # Creating it every time is overhead. Let's fix this in a proper refactor later
+        # For now, we keep it simple but safe.
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            text = await loop.run_in_executor(executor, self.asr.transcribe, audio_data)
         
         asr_duration = time.perf_counter() - asr_start
         print(f"[Pipeline] ✅ ASR Finished in {asr_duration:.3f}s. User said: '{text}'")
