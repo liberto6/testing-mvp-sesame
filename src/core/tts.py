@@ -6,6 +6,7 @@ import soundfile as sf
 import ffmpeg
 import aiohttp
 import base64
+import socket
 from src.utils.config import Config
 
 class TTSManager:
@@ -36,23 +37,36 @@ class TTSManager:
             "outputFormat": "mp3" 
         }
 
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(url, json=payload, headers=headers) as response:
-                    if response.status != 200:
-                        error_text = await response.text()
-                        print(f"[TTS] Inworld API Error: {response.status} - {error_text}")
-                        return b""
-                    
-                    data = await response.json()
-                    if "audioContent" in data:
-                        return base64.b64decode(data["audioContent"])
-                    else:
-                        print(f"[TTS] Warning: Inworld response missing 'audioContent'. Keys: {list(data.keys())}")
-                        return b""
-        except Exception as e:
-            print(f"[TTS] Error calling Inworld API: {e}")
-            return b""
+        # Robust connection settings
+        # Force IPv4 to avoid DNS resolution issues in some pod environments
+        conn = aiohttp.TCPConnector(family=socket.AF_INET, ssl=False)
+        timeout = aiohttp.ClientTimeout(total=10) # 10 seconds timeout
+
+        for attempt in range(3):
+            try:
+                async with aiohttp.ClientSession(connector=conn, timeout=timeout) as session:
+                    async with session.post(url, json=payload, headers=headers) as response:
+                        if response.status != 200:
+                            error_text = await response.text()
+                            print(f"[TTS] Inworld API Error (Attempt {attempt+1}): {response.status} - {error_text}")
+                            if attempt < 2:
+                                await asyncio.sleep(0.5) # Short backoff
+                                continue
+                            return b""
+                        
+                        data = await response.json()
+                        if "audioContent" in data:
+                            return base64.b64decode(data["audioContent"])
+                        else:
+                            print(f"[TTS] Warning: Inworld response missing 'audioContent'. Keys: {list(data.keys())}")
+                            return b""
+            except Exception as e:
+                print(f"[TTS] Error calling Inworld API (Attempt {attempt+1}): {e}")
+                if attempt < 2:
+                    await asyncio.sleep(0.5)
+                else:
+                    return b""
+        return b""
 
     async def _generate_audio_chunk(self, text):
         """
