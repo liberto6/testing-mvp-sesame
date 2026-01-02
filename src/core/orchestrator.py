@@ -24,7 +24,7 @@ class Orchestrator:
         
         # Interaction timer
         self.last_interaction_time = time.time()
-        self.silence_timeout = 5.0 # Seconds
+        self.silence_timeout = 15.0 # Seconds
 
     def stop(self):
         self.stop_event.set()
@@ -50,6 +50,7 @@ class Orchestrator:
                 if is_speech:
                     print("\n[!] Interruption detected!")
                     self.should_interrupt = True
+                    self.last_interaction_time = time.time() # Reset silence timer on interruption
                     # Clear frontend buffer immediately
                     await self.audio.clear_audio_buffer()
                     
@@ -96,6 +97,7 @@ class Orchestrator:
             is_speech = self.process_audio_frame(frame)
 
             if is_speech:
+                self.last_interaction_time = time.time() # Keep timer reset while user is speaking
                 if not self.is_speech_active:
                     print("\n[User] Started speaking...")
                     self.is_speech_active = True
@@ -179,12 +181,14 @@ class Orchestrator:
         if is_hesitation or is_trailing:
             print(f"[Pipeline] ⏳ Detected hesitation/incomplete phrase. continuing listening...")
             self.state = "LISTENING"
+            self.last_interaction_time = time.time() # Reset timer if we decided not to respond
             # We DO NOT clear self.speech_buffer here. 
             # The next frames will be appended, and we'll re-transcribe the whole context next time.
             return
 
         if not text.strip():
             self.state = "LISTENING"
+            self.last_interaction_time = time.time() # Reset timer on empty input
             self.speech_buffer = [] # Clear buffer if it was just silence/noise that produced no text
             return
 
