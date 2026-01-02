@@ -21,6 +21,10 @@ class Orchestrator:
         self.should_interrupt = False
         self.stop_event = asyncio.Event()
         self.estimated_playback_end = 0
+        
+        # Interaction timer
+        self.last_interaction_time = time.time()
+        self.silence_timeout = 5.0 # Seconds
 
     def stop(self):
         self.stop_event.set()
@@ -61,6 +65,7 @@ class Orchestrator:
     async def run(self):
         print("System is ready. Listening...")
         self.audio.start()
+        self.last_interaction_time = time.time()
         
         try:
             while not self.stop_event.is_set():
@@ -110,6 +115,14 @@ class Orchestrator:
                 self.speech_buffer.append(frame)
                 self.silence_frames = 0
             else:
+                if not self.is_speech_active:
+                     # Check silence timeout
+                     if time.time() - self.last_interaction_time > self.silence_timeout:
+                          print(f"\n[Orchestrator] 🕒 Silence timeout ({self.silence_timeout}s) reached.")
+                          self.last_interaction_time = time.time() # Reset immediately
+                          await self._handle_silence_nudge()
+                          return
+
                 if self.is_speech_active:
                     self.speech_buffer.append(frame)
                     self.silence_frames += 1
@@ -175,14 +188,26 @@ class Orchestrator:
             self.speech_buffer = [] # Clear buffer if it was just silence/noise that produced no text
             return
 
-        # 2. LLM
-        print(f"[Pipeline] 🧠 Starting LLM generation...")
-        llm_start = time.perf_counter()
+        await self._process_response(text, turn_start, asr_duration)
+
+    async def _handle_silence_nudge(self):
+        """
+        Triggered when silence timeout is reached.
+        """
+        print("[Orchestrator] Generating silence nudge...")
+        # Use a system prompt injected as user message for the LLM to react
+        prompt = "[System: The user has been silent for a few seconds. Say something brief to encourage them to speak, like 'Are you there?' or 'I'm listening'. Use [neutral] or [happy] tags.]"
         
-        # LLM generation is a generator, we iterate it.
-        # Since it calls API, it might block if not async. 
-        # For now assuming sync generator, we can iterate carefully or wrap.
-        # But we need to pass it to TTS.
+        # We treat this as a new turn
+        await self._process_response(prompt, is_nudge=True)
+
+    async def _process_response(self, text, turn_start=None, asr_duration=0.0, is_nudge=False):
+        if turn_start is None:
+            turn_start = time.perf_counter()
+
+        # 2. LLM
+        print(f"[Pipeline] 🧠 Starting LLM generation... (Nudge: {is_nudge})")
+        llm_start = time.perf_counter()
         
         response_stream = self.llm.generate_response(text)
         
@@ -192,7 +217,6 @@ class Orchestrator:
         self.state = "SPEAKING"
         self.should_interrupt = False
         
-        # We define a helper task for generation to allow concurrent interruption checks
         stop_signal = asyncio.Event()
         
         async def generate_and_play():
@@ -206,20 +230,18 @@ class Orchestrator:
                         time_to_first_audio = time.perf_counter() - turn_start
                         ttft = time.perf_counter() - llm_start
                         print(f"\n[Pipeline] ⚡ LATENCY REPORT:")
-                        print(f"  - Total Latency (End-of-Speech -> Audio): {time_to_first_audio:.3f}s")
-                        print(f"  - ASR Duration: {asr_duration:.3f}s")
+                        print(f"  - Total Latency: {time_to_first_audio:.3f}s")
+                        if not is_nudge:
+                            print(f"  - ASR Duration: {asr_duration:.3f}s")
                         print(f"  - Processing (LLM+TTS) Latency: {ttft:.3f}s")
                         print("-" * 40)
                         first_chunk = False
 
-                    # Check interruption before playing
                     if stop_signal.is_set():
                         break
                         
                     await self.audio.play_audio(audio_chunk, interrupt_check_callback=lambda: stop_signal.is_set())
                     
-                    # Update estimated playback end time
-                    # audio_chunk is int16 (2 bytes) at 16000Hz
                     duration = len(audio_chunk) / 2 / 16000
                     now = time.time()
                     if self.estimated_playback_end < now:
@@ -230,12 +252,9 @@ class Orchestrator:
             except Exception as e:
                 print(f"Error in generation task: {e}")
 
-        # Start generation task
         generation_task = asyncio.create_task(generate_and_play())
         
-        # Monitor for interruptions while generation is running
         while not generation_task.done():
-            # Check for interruption
             if await self.interruption_check():
                 print("[Pipeline] 🛑 Playback interrupted by user.")
                 stop_signal.set()
@@ -244,16 +263,15 @@ class Orchestrator:
                     await generation_task
                 except asyncio.CancelledError:
                     pass
-                return # Return immediately, state is already LISTENING set by interruption_check
+                return 
             
-            # Yield to let generation task run
-            await asyncio.sleep(0.02) # Check every 20ms
+            await asyncio.sleep(0.02)
             
         if not self.should_interrupt:
             total_turn_duration = time.perf_counter() - turn_start
             print(f"[Pipeline] 🏁 Turn finished. Total duration: {total_turn_duration:.3f}s")
         
-        # Reset to listening if not already interrupted (which sets it to listening)
         if self.state == "SPEAKING":
             self.state = "LISTENING"
             self.speech_buffer = []
+            self.last_interaction_time = time.time()
