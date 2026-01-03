@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from src.core.vad import VADManager
 from src.core.asr import ASRManager
 from src.core.llm import LLMManager
-from src.core.tts import TTSManager
+from src.core.tts_factory import create_tts_manager
 from src.core.orchestrator import Orchestrator
 from src.audio.websocket_audio_manager import WebSocketAudioManager
 from src.utils.config import Config
@@ -22,7 +22,7 @@ async def lifespan(app: FastAPI):
     vad = VADManager()
     asr = ASRManager()
     llm = LLMManager()
-    tts = TTSManager()
+    tts = create_tts_manager()  # Factory creates the configured TTS backend
     print("Models loaded!")
     yield
     # Clean up
