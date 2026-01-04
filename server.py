@@ -4,6 +4,7 @@ import os
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Body
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from src.core.vad import VADManager
 from src.core.asr import ASRManager
@@ -31,6 +32,20 @@ async def lifespan(app: FastAPI):
     # Add any cleanup logic here if needed
 
 app = FastAPI(lifespan=lifespan)
+
+# Configure CORS for frontend integration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",  # Vite default dev server
+        "http://localhost:5174",
+        "http://localhost:3000",
+        "http://127.0.0.1:5173",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/")
 async def get():
