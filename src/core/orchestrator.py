@@ -279,3 +279,24 @@ class Orchestrator:
             self.state = "LISTENING"
             self.speech_buffer = []
             self.last_interaction_time = time.time()
+
+    async def handle_interrupt(self):
+        """
+        Handle explicit interruption from frontend (barge-in)
+        """
+        print("[Orchestrator] 🛑 Handling interrupt from frontend...")
+
+        # Signal interruption
+        self.should_interrupt = True
+
+        # Clear frontend audio buffer immediately
+        await self.audio.clear_audio_buffer()
+
+        # Reset state
+        self.state = "LISTENING"
+        self.speech_buffer = []
+        self.is_speech_active = False
+        self.silence_frames = 0
+        self.last_interaction_time = time.time()
+
+        print("[Orchestrator] ✅ Interrupt handled, ready for new speech")

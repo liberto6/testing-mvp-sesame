@@ -70,23 +70,36 @@ async def set_voice(request: VoiceRequest):
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     print("WebSocket connected")
-    
+
     # Create audio manager for this connection
     audio_manager = WebSocketAudioManager(websocket)
-    
+
     # Create orchestrator instance for this connection
     # We pass the global models but a unique audio manager
     orchestrator = Orchestrator(audio_manager, vad, asr, llm, tts)
-    
+
     # Run orchestrator as an asyncio Task (non-blocking)
     orchestrator_task = asyncio.create_task(orchestrator.run())
-    
+
     try:
         while True:
-            # Receive audio data from client
-            data = await websocket.receive_bytes()
-            audio_manager.add_input_audio(data)
-            
+            # Receive message (can be text JSON or binary audio)
+            message = await websocket.receive()
+
+            # Check message type
+            if "bytes" in message:
+                # Binary audio data
+                audio_manager.add_input_audio(message["bytes"])
+
+            elif "text" in message:
+                # JSON control message
+                import json
+                try:
+                    control_msg = json.loads(message["text"])
+                    await handle_control_message(control_msg, orchestrator)
+                except json.JSONDecodeError:
+                    print(f"Warning: Invalid JSON received: {message['text']}")
+
     except WebSocketDisconnect:
         print("WebSocket disconnected")
         audio_manager.stop()
@@ -94,9 +107,25 @@ async def websocket_endpoint(websocket: WebSocket):
         orchestrator_task.cancel()
     except Exception as e:
         print(f"Error: {e}")
+        import traceback
+        traceback.print_exc()
         audio_manager.stop()
         orchestrator.stop()
         orchestrator_task.cancel()
+
+async def handle_control_message(msg: dict, orchestrator):
+    """
+    Handle control messages from frontend
+    """
+    msg_type = msg.get("type")
+
+    if msg_type == "INTERRUPT":
+        print("[Control] 🛑 Interrupt signal received from frontend")
+        # Trigger interruption in orchestrator
+        await orchestrator.handle_interrupt()
+
+    else:
+        print(f"[Control] Unknown message type: {msg_type}")
 
 if __name__ == "__main__":
     import uvicorn
