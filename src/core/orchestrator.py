@@ -53,11 +53,18 @@ class Orchestrator:
                     self.last_interaction_time = time.time() # Reset silence timer on interruption
                     # Clear frontend buffer immediately
                     await self.audio.clear_audio_buffer()
-                    
+
                     # Start buffering this new speech
                     self.speech_buffer = [frame]
                     self.is_speech_active = True
                     self.state = "LISTENING"
+
+                    # Notify frontend of state change
+                    await self.audio.send_json({
+                        "type": "STATE_CHANGE",
+                        "state": "LISTENING"
+                    })
+
                     return True
         except queue.Empty:
             pass
@@ -136,6 +143,13 @@ class Orchestrator:
                         print(f"\n[User] Finished speaking. ({len(self.speech_buffer)} frames)")
                         self.is_speech_active = False
                         self.state = "PROCESSING"
+
+                        # Notify frontend of state change
+                        await self.audio.send_json({
+                            "type": "STATE_CHANGE",
+                            "state": "PROCESSING"
+                        })
+
                         self.silence_frames = 0
         except Exception as e:
             print(f"Error in listening loop: {e}")
@@ -169,7 +183,14 @@ class Orchestrator:
         
         asr_duration = time.perf_counter() - asr_start
         print(f"[Pipeline] ✅ ASR Finished in {asr_duration:.3f}s. User said: '{text}'")
-        
+
+        # Send transcript to frontend
+        if text.strip():
+            await self.audio.send_json({
+                "type": "TRANSCRIPT",
+                "text": text.strip()
+            })
+
         # --- Turn-Taking Logic ---
         # 1. Check for incomplete phrases or hesitation
         # If the user is just hesitating ("um", "ah") or the sentence trails off ("..."), 
@@ -212,24 +233,34 @@ class Orchestrator:
         # 2. LLM
         print(f"[Pipeline] 🧠 Starting LLM generation... (Nudge: {is_nudge})")
         llm_start = time.perf_counter()
-        
+
         response_stream = self.llm.generate_response(text)
-        
+
         # 3. TTS & Playback
         print(f"[Pipeline] 🗣️  Starting TTS generation...")
-        
+
         self.state = "SPEAKING"
+
+        # Notify frontend of state change
+        await self.audio.send_json({
+            "type": "STATE_CHANGE",
+            "state": "SPEAKING"
+        })
+
         self.should_interrupt = False
         
         stop_signal = asyncio.Event()
         
         async def generate_and_play():
             first_chunk = True
+            response_text_sent = False
+            accumulated_text = ""
+
             try:
                 async for audio_chunk in self.tts.generate_audio(response_stream):
                     if stop_signal.is_set():
                         break
-                    
+
                     if first_chunk:
                         time_to_first_audio = time.perf_counter() - turn_start
                         ttft = time.perf_counter() - llm_start
@@ -243,16 +274,30 @@ class Orchestrator:
 
                     if stop_signal.is_set():
                         break
-                        
+
                     await self.audio.play_audio(audio_chunk, interrupt_check_callback=lambda: stop_signal.is_set())
-                    
+
                     duration = len(audio_chunk) / 2 / 16000
                     now = time.time()
                     if self.estimated_playback_end < now:
                         self.estimated_playback_end = now + duration
                     else:
                         self.estimated_playback_end += duration
-                        
+
+                # After generation completes, send the full AI response text
+                # Get it from LLM history (last assistant message)
+                if not response_text_sent and self.llm.history:
+                    for msg in reversed(self.llm.history):
+                        if msg.get("role") == "assistant":
+                            accumulated_text = msg.get("content", "")
+                            break
+
+                    if accumulated_text:
+                        await self.audio.send_json({
+                            "type": "AI_RESPONSE",
+                            "text": accumulated_text
+                        })
+
             except Exception as e:
                 print(f"Error in generation task: {e}")
 
@@ -277,6 +322,13 @@ class Orchestrator:
         
         if self.state == "SPEAKING":
             self.state = "LISTENING"
+
+            # Notify frontend of state change
+            await self.audio.send_json({
+                "type": "STATE_CHANGE",
+                "state": "LISTENING"
+            })
+
             self.speech_buffer = []
             self.last_interaction_time = time.time()
 
@@ -294,6 +346,13 @@ class Orchestrator:
 
         # Reset state
         self.state = "LISTENING"
+
+        # Notify frontend of state change
+        await self.audio.send_json({
+            "type": "STATE_CHANGE",
+            "state": "LISTENING"
+        })
+
         self.speech_buffer = []
         self.is_speech_active = False
         self.silence_frames = 0
