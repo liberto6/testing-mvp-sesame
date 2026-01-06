@@ -53,6 +53,18 @@ class WebSocketAudioManager:
         except Exception as e:
             print(f"Error sending audio to websocket: {e}")
 
+    async def send_json(self, data):
+        """
+        Sends a JSON message to the client via WebSocket.
+        """
+        if not self.is_running:
+            return
+        try:
+            await self.websocket.send_json(data)
+            print(f"[WebSocket] Sent JSON: {data}")
+        except Exception as e:
+            print(f"Error sending JSON to websocket: {e}")
+
     async def clear_audio_buffer(self):
         """
         Sends a signal to the client to clear its audio buffer (stop playback).
@@ -60,7 +72,7 @@ class WebSocketAudioManager:
         if not self.is_running:
             return
         try:
-            await self.websocket.send_json({"type": "CLEAR_BUFFER"})
+            await self.send_json({"type": "CLEAR_BUFFER"})
         except Exception as e:
             print(f"Error sending clear buffer signal: {e}")
 

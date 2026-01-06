@@ -113,13 +113,12 @@ class Orchestrator:
                     # FORCE STOP PLAYBACK ON CLIENT
                     # The user might interrupt while audio is still playing in the browser buffer
                     # even if the server finished sending it.
-                    
+
                     # Check if we are interrupting active playback (latent interruption)
                     if time.time() < self.estimated_playback_end:
                          print("\n[!] Interruption detected!")
                          print("[Pipeline] 🛑 Playback interrupted by user.")
-                         
-                    await self.audio.clear_audio_buffer()
+                         await self.audio.clear_audio_buffer()
                 
                 self.speech_buffer.append(frame)
                 self.silence_frames = 0
