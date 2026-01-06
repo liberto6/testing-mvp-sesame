@@ -289,14 +289,22 @@ class Orchestrator:
                     if stop_signal.is_set():
                         break
 
+                    # Calculate audio duration BEFORE sending
+                    duration = len(audio_chunk) / 2 / 16000
+
+                    # Send audio
                     await self.audio.play_audio(audio_chunk, interrupt_check_callback=lambda: stop_signal.is_set())
 
-                    duration = len(audio_chunk) / 2 / 16000
+                    # Update estimated playback end time
                     now = time.time()
                     if self.estimated_playback_end < now:
                         self.estimated_playback_end = now + duration
                     else:
                         self.estimated_playback_end += duration
+
+                    # CRITICAL: Wait for this chunk to finish playing before sending next chunk
+                    # This prevents audio overlap where multiple chunks play simultaneously
+                    await asyncio.sleep(duration * 0.95)  # 95% of duration to account for processing time
 
                 # After generation completes, send the full AI response text
                 # Get it from LLM history (last assistant message)
