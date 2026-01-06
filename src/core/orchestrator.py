@@ -21,6 +21,7 @@ class Orchestrator:
         self.should_interrupt = False
         self.stop_event = asyncio.Event()
         self.estimated_playback_end = 0
+        self.is_processing = False  # Flag to prevent re-entry into _handle_processing()
         
         # Interaction timer
         self.last_interaction_time = time.time()
@@ -158,61 +159,75 @@ class Orchestrator:
         """
         Process the collected speech buffer: ASR -> LLM -> TTS -> Play
         """
+        # Prevent re-entry - critical for avoiding duplicate responses
+        if self.is_processing:
+            return
+
         if not self.speech_buffer:
             self.state = "LISTENING"
             return
 
-        turn_start = time.perf_counter()
-        audio_data = np.concatenate(self.speech_buffer)
-        
-        # 1. ASR (Sync for now, but fast)
-        asr_start = time.perf_counter()
-        print(f"\n[Pipeline] 🎤 Starting ASR...")
-        
-        # Use a dedicated thread pool for ASR to avoid blocking the main event loop
-        # and prevent it from interfering with other async tasks
-        loop = asyncio.get_running_loop()
-        import concurrent.futures
-        
-        # Ideally this executor should be created in __init__ and reused
-        # Creating it every time is overhead. Let's fix this in a proper refactor later
-        # For now, we keep it simple but safe.
-        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
-            text = await loop.run_in_executor(executor, self.asr.transcribe, audio_data)
-        
-        asr_duration = time.perf_counter() - asr_start
-        print(f"[Pipeline] ✅ ASR Finished in {asr_duration:.3f}s. User said: '{text}'")
+        # Set flag and move buffer to local variable immediately
+        # This prevents re-processing if this method is called again
+        self.is_processing = True
+        audio_data_frames = self.speech_buffer
+        self.speech_buffer = []
 
-        # Send transcript to frontend
-        if text.strip():
-            await self.audio.send_json({
-                "type": "TRANSCRIPT",
-                "text": text.strip()
-            })
+        try:
+            turn_start = time.perf_counter()
+            audio_data = np.concatenate(audio_data_frames)
 
-        # --- Turn-Taking Logic ---
-        # 1. Check for incomplete phrases or hesitation
-        # If the user is just hesitating ("um", "ah") or the sentence trails off ("..."), 
-        # we should continue listening instead of responding.
-        
-        is_hesitation = text.strip().lower() in ["um", "uh", "ah", "hmm", "well", "so", "like"]
-        is_trailing = text.strip().endswith("...")
-        
-        if is_hesitation or is_trailing:
-            print(f"[Pipeline] ⏳ Detected hesitation/incomplete phrase. continuing listening...")
-            self.state = "LISTENING"
-            self.last_interaction_time = time.time() # Reset timer if we decided not to respond
-            # We DO NOT clear self.speech_buffer here. 
-            # The next frames will be appended, and we'll re-transcribe the whole context next time.
-            return
+            # 1. ASR (Sync for now, but fast)
+            asr_start = time.perf_counter()
+            print(f"\n[Pipeline] 🎤 Starting ASR...")
 
-        if not text.strip():
-            self.state = "LISTENING"
-            self.last_interaction_time = time.time() # Reset timer on empty input
-            self.speech_buffer = [] # Clear buffer if it was just silence/noise that produced no text
-            return
+            # Use a dedicated thread pool for ASR to avoid blocking the main event loop
+            # and prevent it from interfering with other async tasks
+            loop = asyncio.get_running_loop()
+            import concurrent.futures
 
-        await self._process_response(text, turn_start, asr_duration)
+            # Ideally this executor should be created in __init__ and reused
+            # Creating it every time is overhead. Let's fix this in a proper refactor later
+            # For now, we keep it simple but safe.
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                text = await loop.run_in_executor(executor, self.asr.transcribe, audio_data)
+
+            asr_duration = time.perf_counter() - asr_start
+            print(f"[Pipeline] ✅ ASR Finished in {asr_duration:.3f}s. User said: '{text}'")
+
+            # Send transcript to frontend
+            if text.strip():
+                await self.audio.send_json({
+                    "type": "TRANSCRIPT",
+                    "text": text.strip()
+                })
+
+            # --- Turn-Taking Logic ---
+            # 1. Check for incomplete phrases or hesitation
+            # If the user is just hesitating ("um", "ah") or the sentence trails off ("..."),
+            # we should continue listening instead of responding.
+
+            is_hesitation = text.strip().lower() in ["um", "uh", "ah", "hmm", "well", "so", "like"]
+            is_trailing = text.strip().endswith("...")
+
+            if is_hesitation or is_trailing:
+                print(f"[Pipeline] ⏳ Detected hesitation/incomplete phrase. continuing listening...")
+                self.state = "LISTENING"
+                self.last_interaction_time = time.time() # Reset timer if we decided not to respond
+                # We DO NOT clear self.speech_buffer here.
+                # The next frames will be appended, and we'll re-transcribe the whole context next time.
+                return
+
+            if not text.strip():
+                self.state = "LISTENING"
+                self.last_interaction_time = time.time() # Reset timer on empty input
+                return
+
+            await self._process_response(text, turn_start, asr_duration)
+
+        finally:
+            # Always reset flag, even if there's an exception
+            self.is_processing = False
 
     async def _handle_silence_nudge(self):
         """
@@ -328,7 +343,7 @@ class Orchestrator:
                 "state": "LISTENING"
             })
 
-            self.speech_buffer = []
+            # Buffer already cleared at start of _handle_processing()
             self.last_interaction_time = time.time()
 
     async def handle_interrupt(self):
