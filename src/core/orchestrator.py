@@ -388,9 +388,22 @@ class Orchestrator:
 
             # 4. Envío al frontend
             await self.audio.play_audio(pcm_audio)
+            
+            # Calcular duración del audio para evitar solapamientos
+            # pcm_audio es int16 a 16000Hz
+            duration = len(pcm_audio) / 16000.0
+            
+            # Esperar a que termine de reproducirse (con chequeo de interrupción)
+            elapsed = 0
+            while elapsed < duration:
+                if self.should_interrupt:
+                    return
+                await asyncio.sleep(0.05)
+                elapsed += 0.05
 
             # 5. Incrementar el contador para permitir que el siguiente índice proceda
-            self.next_to_send_index += 1
+            if not self.should_interrupt:
+                self.next_to_send_index += 1
 
         except Exception as e:
             print(f"[Orchestrator] Error processing TTS fragment {index}: {e}")
