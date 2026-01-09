@@ -78,12 +78,32 @@ class TTSManager:
         """
         import re
         
+        # Inworld supported tags (Audio Markups)
+        # Source: Inworld Documentation
+        VALID_TAGS = {
+            # Emotions
+            "happy", "sad", "angry", "surprised", "fearful", "disgusted", "neutral",
+            # Styles/Vocalizations
+            "whispering", "shouting", "laughing", "crying", "sighing", "breathing", 
+            "cough", "emphasizing"
+        }
+
         # 1. Remove parentheses (often used for non-speech context by LLMs)
-        # We DO NOT remove square brackets [] because Inworld TTS supports inline emotion tags (Audio Markups)
-        # e.g., "Hello [happy] friend!" is valid.
-        clean_text = re.sub(r'\(.*?\)', '', text).strip()
+        text_no_parens = re.sub(r'\(.*?\)', '', text)
         
-        # 2. Security check: ensure there is speakable content
+        # 2. Filter square brackets tags
+        # Only allow tags that are strictly in the VALID_TAGS list.
+        # Unknown tags will be removed completely to prevent TTS from reading them as text.
+        def validate_tag(match):
+            tag_content = match.group(1).lower().strip()
+            if tag_content in VALID_TAGS:
+                return f"[{tag_content}]" # Keep valid tag
+            else:
+                return "" # Remove invalid tag (e.g. [excited], [warm])
+
+        clean_text = re.sub(r'\[(.*?)\]', validate_tag, text_no_parens).strip()
+        
+        # 3. Security check: ensure there is speakable content
         # We strip tags TEMPORARILY just to check if there are actual words to say
         text_content_only = re.sub(r'\[.*?\]', '', clean_text).strip()
         

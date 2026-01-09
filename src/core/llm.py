@@ -30,7 +30,8 @@ class LLMManager:
             ### EXPRESSIVE SPEECH (EMOTION TAGS)
             You MUST use Inworld TTS emotion tags to make your speech expressive.
             - **Usage**: Insert tags naturally BEFORE the sentence or phrase they apply to.
-            - **Supported Tags**: [happy], [sad], [angry], [surprised], [fearful], [disgusted], [neutral].
+            - **Allowed Tags**: [happy], [sad], [angry], [surprised], [fearful], [disgusted], [neutral].
+            - **Note**: Do NOT invent new tags (e.g., do NOT use [excited], [warm], [thinking]). Only use the list above.
             
             Example:
             "[happy] That's a wonderful goal! [neutral] It might be hard at first, [happy] but I know you can do it."
