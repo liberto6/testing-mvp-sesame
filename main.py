@@ -24,13 +24,14 @@ async def main():
         tts = TTSManager()
         
         orchestrator = Orchestrator(audio, vad, asr, llm, tts)
-        
         await orchestrator.run()
-        
+
+    except KeyboardInterrupt:
+        print("\nExiting...")
     except Exception as e:
-        print(f"Error initializing system: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"Error: {e}")
+    finally:
+        print("Cleanup done.")
 
 if __name__ == "__main__":
     if sys.platform == 'win32':

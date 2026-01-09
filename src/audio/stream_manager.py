@@ -15,6 +15,17 @@ class AudioStreamManager:
         self.input_stream = None
         self.output_stream = None
         
+    async def read_frame(self):
+        """
+        Reads a frame from the input queue.
+        """
+        while self.is_running:
+            try:
+                return self.input_queue.get_nowait()
+            except queue.Empty:
+                await asyncio.sleep(0.01)
+        return None
+
     def start_input_stream(self):
         def callback(in_data, frame_count, time_info, status):
             if self.is_running:

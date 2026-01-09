@@ -32,10 +32,16 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+# Mount the assets folder from dist
+app.mount("/assets", StaticFiles(directory="dist/assets"), name="assets")
+
 @app.get("/")
 async def get():
-    with open("src/web/static/index.html", "r") as f:
-        return HTMLResponse(f.read())
+    return FileResponse("dist/index.html")
+
+@app.get("/vite.svg")
+async def get_vite_svg():
+    return FileResponse("dist/vite.svg")
 
 class VoiceRequest(BaseModel):
     voice_id: str
