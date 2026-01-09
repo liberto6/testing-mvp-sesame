@@ -2,7 +2,7 @@ import asyncio
 import threading
 import os
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Body
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from src.core.vad import VADManager
