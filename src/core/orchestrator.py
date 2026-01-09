@@ -11,7 +11,7 @@ class Orchestrator:
         self.asr = asr_manager
         self.llm = llm_manager
         self.tts = tts_manager
-        
+        self.next_to_send_index = 0
         self.speech_buffer = []
         self.silence_frames = 0
         self.is_speech_active = False
@@ -262,73 +262,54 @@ class Orchestrator:
         })
 
         self.should_interrupt = False
+        self.next_to_send_index = 0
         
-        stop_signal = asyncio.Event()
-        
-        async def generate_and_play():
-            first_chunk = True
-            response_text_sent = False
-            accumulated_text = ""
-
+        async def generate_and_schedule():
+            buffer = ""
+            sentence_index = 0
+            import re
+            
             try:
-                async for audio_chunk in self.tts.generate_audio(response_stream):
-                    if stop_signal.is_set():
+                async for text_chunk in response_stream:
+                    if self.should_interrupt:
                         break
-
-                    if first_chunk:
-                        time_to_first_audio = time.perf_counter() - turn_start
-                        ttft = time.perf_counter() - llm_start
-                        print(f"\n[Pipeline] ⚡ LATENCY REPORT:")
-                        print(f"  - Total Latency: {time_to_first_audio:.3f}s")
-                        if not is_nudge:
-                            print(f"  - ASR Duration: {asr_duration:.3f}s")
-                        print(f"  - Processing (LLM+TTS) Latency: {ttft:.3f}s")
-                        print("-" * 40)
-                        first_chunk = False
-
-                    if stop_signal.is_set():
+                    
+                    buffer += text_chunk
+                    
+                    # Split by strong punctuation
+                    if any(punct in buffer for punct in [".", "!", "?", "\n"]):
+                        parts = re.split(r'([.!?\n])', buffer)
+                        
+                        # parts: ['Hello', '!', ' How are you', '?', '']
+                        if len(parts) > 1:
+                            for i in range(0, len(parts)-1, 2):
+                                phrase = parts[i] + parts[i+1]
+                                if phrase.strip():
+                                    asyncio.create_task(self.process_tts_fragment(phrase, sentence_index))
+                                    sentence_index += 1
+                            
+                            buffer = parts[-1]
+                
+                # Process remaining buffer
+                if buffer.strip() and not self.should_interrupt:
+                    asyncio.create_task(self.process_tts_fragment(buffer, sentence_index))
+                    sentence_index += 1
+                
+                # Wait for all sentences to be played
+                while self.next_to_send_index < sentence_index:
+                    if self.should_interrupt:
                         break
-
-                    # Calculate audio duration BEFORE sending
-                    duration = len(audio_chunk) / 2 / 16000
-
-                    # Send audio
-                    await self.audio.play_audio(audio_chunk, interrupt_check_callback=lambda: stop_signal.is_set())
-
-                    # Update estimated playback end time
-                    now = time.time()
-                    if self.estimated_playback_end < now:
-                        self.estimated_playback_end = now + duration
-                    else:
-                        self.estimated_playback_end += duration
-
-                    # CRITICAL: Wait for this chunk to finish playing before sending next chunk
-                    # This prevents audio overlap where multiple chunks play simultaneously
-                    await asyncio.sleep(duration * 0.95)  # 95% of duration to account for processing time
-
-                # After generation completes, send the full AI response text
-                # Get it from LLM history (last assistant message)
-                if not response_text_sent and self.llm.history:
-                    for msg in reversed(self.llm.history):
-                        if msg.get("role") == "assistant":
-                            accumulated_text = msg.get("content", "")
-                            break
-
-                    if accumulated_text:
-                        await self.audio.send_json({
-                            "type": "AI_RESPONSE",
-                            "text": accumulated_text
-                        })
+                    await asyncio.sleep(0.1)
 
             except Exception as e:
                 print(f"Error in generation task: {e}")
 
-        generation_task = asyncio.create_task(generate_and_play())
+        generation_task = asyncio.create_task(generate_and_schedule())
         
         while not generation_task.done():
             if await self.interruption_check():
                 print("[Pipeline] 🛑 Playback interrupted by user.")
-                stop_signal.set()
+                self.should_interrupt = True
                 generation_task.cancel()
                 try:
                     await generation_task
@@ -354,11 +335,7 @@ class Orchestrator:
             # Buffer already cleared at start of _handle_processing()
             self.last_interaction_time = time.time()
 
-    async def handle_interrupt(self):
-        
-	"""
-        Handle explicit interruption from frontend (barge-in)
-        """
+    async def handle_interrupt(self):   
         print("[Orchestrator]  ^=^{^q Handling interrupt from frontend...")
 
         # Signal interruption
@@ -387,16 +364,17 @@ class Orchestrator:
         self.silence_frames = 0
         self.last_interaction_time = time.time()
 
-        print("[Orchestrator]  ^|^e Interrupt hand
+        print("[Orchestrator]  ^|^e Interrupt hand")
 
     async def process_tts_fragment(self, text, index):
-        """
-        Genera audio en paralelo pero asegura el envío secuencial al frontend.
-        """
         try:
+        
             # 1. Generación de audio (esto ocurre en paralelo con otros fragmentos)
             # Asumo que self.tts.generate devuelve el payload de audio
             audio_payload = await self.tts.generate(text)
+            
+            # Convertir a PCM para playback (mantiene consistencia con el sistema actual)
+            pcm_audio = await self.tts._convert_bytes_to_pcm(audio_payload)
 
             # 2. Control de flujo: Esperar hasta que sea el turno de este índice
             while self.next_to_send_index < index:
@@ -409,9 +387,14 @@ class Orchestrator:
                 return
 
             # 4. Envío al frontend
-            await self.audio.send_audio(audio_payload)
+            await self.audio.play_audio(pcm_audio)
 
             # 5. Incrementar el contador para permitir que el siguiente índice proceda
+            self.next_to_send_index += 1
+
+        except Exception as e:
+            print(f"[Orchestrator] Error processing TTS fragment {index}: {e}")
+            # Incrementamos el índice incluso en error para no bloquear la cola
             self.next_to_send_index += 1
 
 

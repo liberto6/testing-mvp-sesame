@@ -92,6 +92,13 @@ class TTSManager:
 
         return await self._generate_inworld(clean_text)
 
+    async def generate(self, text):
+        """
+        Public method to generate audio (MP3 bytes) for a single text fragment.
+        Wraps _generate_audio_chunk to include text cleaning.
+        """
+        return await self._generate_audio_chunk(text)
+
     async def generate_audio(self, text_stream):
         """
         Generates audio from a text stream (iterator).
