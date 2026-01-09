@@ -402,6 +402,13 @@ class Orchestrator:
                 return
 
             # 4. Envío al frontend
+            # a) Enviar texto de la IA para la UI
+            await self.audio.send_json({
+                "type": "AI_RESPONSE",
+                "text": text
+            })
+
+            # b) Enviar audio
             await self.audio.play_audio(pcm_audio)
             
             # Calcular duración del audio para evitar solapamientos
