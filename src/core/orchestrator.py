@@ -368,7 +368,22 @@ class Orchestrator:
 
     async def process_tts_fragment(self, text, index):
         try:
-        
+            # Clean text for TTS
+            # Remove asterisks and other non-spoken characters that might slip through
+            text = text.replace("*", "").replace("`", "").strip()
+            
+            if not text:
+                # If text is empty after cleaning, we still need to respect the order
+                # Wait until it's our turn to "play" (i.e., do nothing) and then increment
+                while self.next_to_send_index < index:
+                    if self.should_interrupt:
+                        return
+                    await asyncio.sleep(0.02)
+                
+                if not self.should_interrupt:
+                    self.next_to_send_index += 1
+                return
+
             # 1. Generación de audio (esto ocurre en paralelo con otros fragmentos)
             # Asumo que self.tts.generate devuelve el payload de audio
             audio_payload = await self.tts.generate(text)
