@@ -2,6 +2,7 @@ import queue
 import time
 import numpy as np
 import asyncio
+import re
 from src.utils.config import Config
 
 class Orchestrator:
@@ -403,10 +404,16 @@ class Orchestrator:
 
             # 4. Envío al frontend
             # a) Enviar texto de la IA para la UI
-            await self.audio.send_json({
-                "type": "AI_RESPONSE",
-                "text": text
-            })
+            # Clean emotion tags [happy], [neutral], etc. for display
+            ui_text = re.sub(r'\[.*?\]', '', text).strip()
+            # Also clean multiple spaces if any
+            ui_text = re.sub(r'\s+', ' ', ui_text)
+            
+            if ui_text:
+                await self.audio.send_json({
+                    "type": "AI_RESPONSE",
+                    "text": ui_text
+                })
 
             # b) Enviar audio
             await self.audio.play_audio(pcm_audio)
